@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Asset, AssetStatus } from './entities/asset.entity';
 import { AssetHistory } from '../history/entities/asset-history.entity';
+import { RedisService } from '../../common/redis/redis.service';
 import {
   CreateAssetDto,
   QueryAssetDto,
@@ -21,14 +22,31 @@ export class AssetsService {
     private readonly assetRepo: Repository<Asset>,
     @InjectRepository(AssetHistory)
     private readonly historyRepo: Repository<AssetHistory>,
+    private readonly redisService: RedisService,
   ) {}
 
-  // 1. LẤY DANH SÁCH TÀI SẢN (Hỗ trợ phân trang, tìm kiếm mã/tên, lọc trạng thái, lọc xưởng)
+  // 1. LẤY DANH SÁCH TÀI SẢN (Hỗ trợ phân trang, tìm kiếm mã/tên, lọc trạng thái, lọc xưởng kèm Redis Cache)
   async findAll(query: QueryAssetDto) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 10;
     const skip = (page - 1) * limit;
 
+    // 1.1. Tạo key định danh cache theo toàn bộ bộ lọc
+    const cacheKey = `assets:list:${page}:${limit}:${query.search || ''}:${query.status || ''}:${query.locationId || ''}:${query.category || ''}`;
+
+    // 1.2. Thử lấy dữ liệu từ Redis Cache trước
+    const cachedData = await this.redisService.get<any>(cacheKey);
+    if (cachedData) {
+      return {
+        ...cachedData,
+        meta: {
+          ...cachedData.meta,
+          fromCache: true,
+        },
+      };
+    }
+
+    // 1.3. Nếu Cache Miss (chưa có trong cache) -> Truy vấn PostgreSQL
     const queryBuilder = this.assetRepo
       .createQueryBuilder('asset')
       .leftJoinAndSelect('asset.location', 'location')
@@ -64,7 +82,7 @@ export class AssetsService {
 
     const [items, total] = await queryBuilder.getManyAndCount();
 
-    return {
+    const responsePayload = {
       success: true,
       data: items,
       meta: {
@@ -72,8 +90,14 @@ export class AssetsService {
         page,
         limit,
         totalPages: Math.ceil(total / limit),
+        fromCache: false,
       },
     };
+
+    // 1.4. Lưu vào Redis Cache với thời gian sống (TTL) 120 giây (2 phút)
+    await this.redisService.set(cacheKey, responsePayload, 120);
+
+    return responsePayload;
   }
 
   // 2. XEM CHI TIẾT MỘT TÀI SẢN (Kèm vị trí và định mức phụ tùng BOM)
@@ -137,7 +161,10 @@ export class AssetsService {
       cachedMtbfHours: 0,
     });
 
-    return this.assetRepo.save(newAsset);
+    const saved = await this.assetRepo.save(newAsset);
+    // Invalidate cache danh sách tài sản khi có máy mới được thêm
+    await this.redisService.delByPattern('assets:*');
+    return saved;
   }
 
   // 5. CẬP NHẬT TRẠNG THÁI TÀI SẢN (OPERATIONAL, DOWN, MAINTENANCE, DECOMMISSIONED)
@@ -151,14 +178,20 @@ export class AssetsService {
       asset.lastFailureDate = new Date();
     }
 
-    return this.assetRepo.save(asset);
+    const saved = await this.assetRepo.save(asset);
+    // Invalidate cache
+    await this.redisService.delByPattern('assets:*');
+    return saved;
   }
 
   // 6. CẬP NHẬT THÔNG TIN TÀI SẢN
   async update(id: string, dto: UpdateAssetDto): Promise<Asset> {
     const asset = await this.findOne(id);
     Object.assign(asset, dto);
-    return this.assetRepo.save(asset);
+    const saved = await this.assetRepo.save(asset);
+    // Invalidate cache
+    await this.redisService.delByPattern('assets:*');
+    return saved;
   }
 
   // 7. XÓA TÀI SẢN (Xóa mềm - Soft delete)
@@ -166,15 +199,27 @@ export class AssetsService {
     const asset = await this.findOne(id);
     asset.isActive = false;
     await this.assetRepo.save(asset);
+    // Invalidate cache
+    await this.redisService.delByPattern('assets:*');
     return {
       success: true,
       message: `Đã vô hiệu hóa thành công tài sản ${asset.assetCode} - ${asset.name}`,
     };
   }
 
-  // 8. XEM LỊCH SỬ BẢO TRÌ CỦA MỘT TÀI SẢN CỤ THỂ
+  // 8. XEM LỊCH SỬ BẢO TRÌ CỦA MỘT TÀI SẢN CỤ THỂ (KÈM REDIS CACHE)
   async getMaintenanceHistory(assetId: string) {
-    // Kiểm tra tài sản có tồn tại không
+    // 8.1. Kiểm tra Redis Cache
+    const cacheKey = `assets:history:${assetId}`;
+    const cachedHistory = await this.redisService.get<any>(cacheKey);
+    if (cachedHistory) {
+      return {
+        ...cachedHistory,
+        fromCache: true,
+      };
+    }
+
+    // 8.2. Kiểm tra tài sản có tồn tại không
     await this.findOne(assetId);
 
     const history = await this.historyRepo.find({
@@ -197,7 +242,7 @@ export class AssetsService {
     const failuresCount = failureLogs.length;
     const mttr = failuresCount > 0 ? Number((totalRepairHours / failuresCount).toFixed(2)) : 0;
 
-    return {
+    const result = {
       success: true,
       assetId,
       totalEvents: history.length,
@@ -208,7 +253,13 @@ export class AssetsService {
         mttrHours: mttr,
       },
       historyTimeline: history,
+      fromCache: false,
     };
+
+    // 8.3. Lưu vào Redis Cache trong 180 giây (3 phút)
+    await this.redisService.set(cacheKey, result, 180);
+
+    return result;
   }
 
   // 9. QUÉT MÃ QR HOẶC NHẬP ASSET ID: XEM CHI TIẾT THIẾT BỊ KÈM DANH SÁCH PHỤ TÙNG CẦN THAY ĐỊNH KỲ

@@ -7,6 +7,7 @@ import { LocationsModule } from './modules/locations/locations.module';
 import { AssetsModule } from './modules/assets/assets.module';
 import { PartsModule } from './modules/parts/parts.module';
 import { HistoryModule } from './modules/history/history.module';
+import { RedisModule } from './common/redis/redis.module';
 
 @Module({
   imports: [
@@ -15,6 +16,9 @@ import { HistoryModule } from './modules/history/history.module';
       isGlobal: true,
       envFilePath: ['../.env', '.env'],
     }),
+
+    // Module Caching Redis toàn cục
+    RedisModule,
 
     // Bộ lập lịch tự động (Cron job cho bảo dưỡng định kỳ)
     ScheduleModule.forRoot(),
