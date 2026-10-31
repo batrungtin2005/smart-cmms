@@ -210,4 +210,181 @@ export class AssetsService {
       historyTimeline: history,
     };
   }
+
+  // 9. QUÉT MÃ QR HOẶC NHẬP ASSET ID: XEM CHI TIẾT THIẾT BỊ KÈM DANH SÁCH PHỤ TÙNG CẦN THAY ĐỊNH KỲ
+  async scanQrAndGetInspectionDetails(identifier: string) {
+    if (!identifier || identifier.trim() === '') {
+      throw new NotFoundException('Mã QR hoặc ID thiết bị không được để trống!');
+    }
+
+    // Chuẩn hóa identifier (Bóc tách mã nếu là URL hoặc Schema QR Code)
+    let parsedCode = identifier.trim();
+    if (parsedCode.includes('cmms://assets/code/')) {
+      parsedCode = parsedCode.replace('cmms://assets/code/', '').trim();
+    } else if (parsedCode.includes('/code/')) {
+      parsedCode = parsedCode.substring(parsedCode.lastIndexOf('/code/') + 6).trim();
+    } else if (parsedCode.includes('/assets/')) {
+      parsedCode = parsedCode.substring(parsedCode.lastIndexOf('/assets/') + 8).trim();
+    }
+
+    // Nhận diện định dạng UUID hay Asset Code (AST-xxx / COMP-xxx)
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parsedCode);
+
+    const asset = await this.assetRepo.findOne({
+      where: isUuid
+        ? { id: parsedCode, isActive: true }
+        : { assetCode: parsedCode.toUpperCase(), isActive: true },
+      relations: [
+        'location',
+        'location.parent',
+        'bomParts',
+        'bomParts.part',
+      ],
+    });
+
+    if (!asset) {
+      throw new NotFoundException(
+        `Không tìm thấy thiết bị tương ứng với mã quét QR: '${identifier}'`,
+      );
+    }
+
+    // Lấy toàn bộ lịch sử sửa chữa/bảo trì của máy
+    const history = await this.historyRepo.find({
+      where: { assetId: asset.id },
+      relations: ['performedBy'],
+      order: { createdAt: 'DESC' },
+    });
+
+    // Phân tích danh sách phụ tùng định mức cần thay thế định kỳ
+    const currentOperatingHours = Number(asset.operatingHours || 0);
+
+    const periodicReplacementParts = (asset.bomParts || []).map((bom) => {
+      const part = bom.part;
+      const intervalHours = bom.replacementIntervalHours ? Number(bom.replacementIntervalHours) : null;
+      const intervalDays = bom.replacementIntervalDays ? Number(bom.replacementIntervalDays) : null;
+
+      // Tìm trong lịch sử xem phụ tùng này được thay thế gần nhất khi nào
+      let lastReplacedOperatingHours = 0;
+      let lastReplacedDate: Date | null = null;
+
+      for (const log of history) {
+        if (log.partsReplaced && Array.isArray(log.partsReplaced)) {
+          const foundPart = log.partsReplaced.find(
+            (p: any) => p.partId === bom.partId || p.partCode === part.partCode,
+          );
+          if (foundPart) {
+            lastReplacedOperatingHours = Number(log.operatingHoursAtFailure || 0);
+            lastReplacedDate = log.repairEndTime || log.createdAt;
+            break;
+          }
+        }
+      }
+
+      // Tính toán chu kỳ thay thế
+      let hoursSinceLastReplacement = currentOperatingHours - lastReplacedOperatingHours;
+      if (hoursSinceLastReplacement < 0) hoursSinceLastReplacement = 0;
+
+      let remainingHours: number | null = null;
+      let maintenanceStatus: 'OVERDUE' | 'DUE_SOON' | 'GOOD' | 'NO_INTERVAL' = 'NO_INTERVAL';
+
+      if (intervalHours && intervalHours > 0) {
+        remainingHours = Number((intervalHours - hoursSinceLastReplacement).toFixed(2));
+        if (remainingHours <= 0) {
+          maintenanceStatus = 'OVERDUE'; // Đã quá hạn thay thế định kỳ!
+        } else if (remainingHours <= 50) {
+          maintenanceStatus = 'DUE_SOON'; // Sắp đến hạn thay trong vòng 50 giờ máy chạy
+        } else {
+          maintenanceStatus = 'GOOD'; // Đang hoạt động tốt
+        }
+      }
+
+      // Kiểm tra tình trạng tồn kho thực tế
+      const inStock = Number(part.currentStock || 0);
+      const standardQty = Number(bom.standardQuantity || 1);
+      let stockStatus: 'AVAILABLE' | 'LOW_STOCK' | 'OUT_OF_STOCK' = 'AVAILABLE';
+
+      if (inStock === 0) {
+        stockStatus = 'OUT_OF_STOCK';
+      } else if (inStock < standardQty) {
+        stockStatus = 'LOW_STOCK';
+      }
+
+      return {
+        partId: part.id,
+        partCode: part.partCode,
+        partName: part.name,
+        category: part.category,
+        unit: part.unit,
+        unitPrice: Number(part.unitPrice),
+        standardQuantity: standardQty,
+        installationPosition: bom.installationPosition || 'Hệ thống máy nén khí',
+        isCritical: bom.isCritical,
+        // Thông tin định mức
+        replacementIntervalHours: intervalHours,
+        replacementIntervalDays: intervalDays,
+        // Dữ liệu theo dõi thực tế
+        lastReplacedDate,
+        lastReplacedOperatingHours,
+        hoursSinceLastReplacement: Number(hoursSinceLastReplacement.toFixed(2)),
+        remainingHoursUntilReplacement: remainingHours,
+        maintenanceStatus, // OVERDUE | DUE_SOON | GOOD
+        // Dữ liệu tồn kho
+        currentStock: inStock,
+        shelfLocation: part.shelfLocation || 'Chưa xếp kệ',
+        stockStatus, // AVAILABLE | LOW_STOCK | OUT_OF_STOCK
+      };
+    });
+
+    // Thống kê chỉ số MTTR & MTBF của thiết bị
+    const failureLogs = history.filter((h) => h.isFailureCounted);
+    const totalRepairHours = failureLogs.reduce(
+      (sum, h) => sum + Number(h.actualRepairTimeHours || 0),
+      0,
+    );
+    const failureCount = failureLogs.length;
+    const mttrHours = failureCount > 0 ? Number((totalRepairHours / failureCount).toFixed(2)) : 0;
+    const mtbfHours = failureCount > 0 ? Number((currentOperatingHours / failureCount).toFixed(2)) : currentOperatingHours;
+
+    const overduePartsCount = periodicReplacementParts.filter((p) => p.maintenanceStatus === 'OVERDUE').length;
+    const dueSoonPartsCount = periodicReplacementParts.filter((p) => p.maintenanceStatus === 'DUE_SOON').length;
+
+    return {
+      success: true,
+      message: 'Tra cứu thông tin quét mã QR thành công',
+      scannedIdentifier: identifier,
+      asset: {
+        id: asset.id,
+        assetCode: asset.assetCode,
+        name: asset.name,
+        category: asset.category,
+        manufacturer: asset.manufacturer,
+        model: asset.model,
+        serialNumber: asset.serialNumber,
+        status: asset.status,
+        criticality: asset.criticality,
+        installDate: asset.installDate,
+        operatingHours: currentOperatingHours,
+        qrCodeUrl: asset.qrCodeUrl,
+        location: asset.location
+          ? {
+              id: asset.location.id,
+              code: asset.location.code,
+              name: asset.location.name,
+              factoryArea: asset.location.parent ? asset.location.parent.name : null,
+            }
+          : null,
+        specifications: asset.specifications || {},
+      },
+      maintenanceOverview: {
+        totalFailures: failureCount,
+        mttrHours,
+        mtbfHours,
+        overduePartsCount,
+        dueSoonPartsCount,
+        hasUrgentMaintenance: overduePartsCount > 0 || asset.status === AssetStatus.DOWN,
+      },
+      periodicReplacementParts,
+      recentMaintenanceHistory: history.slice(0, 5),
+    };
+  }
 }

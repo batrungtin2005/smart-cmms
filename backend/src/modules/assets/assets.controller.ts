@@ -56,7 +56,40 @@ export class AssetsController {
     return this.assetsService.findByCode(code);
   }
 
-  // 3. ENDPOINT: XEM CHI TIẾT 1 TÀI SẢN
+  // 3. ENDPOINT: QUÉT MÃ QR HOẶC NHẬP ASSET ID - KIỂM TRA LỊCH SỬ & PHỤ TÙNG CẦN THAY THẾ ĐỊNH KỲ
+  @Get('scan-qr')
+  @ApiOperation({
+    summary: 'Quét mã QR kiểm tra lịch sử thiết bị & phụ tùng thay thế định kỳ',
+    description:
+      'Nhận vào chuỗi quét mã QR (hoặc mã tài sản/ID). Trả về thông tin chi tiết máy (ví dụ máy nén khí), thông số kỹ thuật, lịch sử bảo trì và bảng đánh giá các phụ tùng cần thay thế định kỳ (tính toán số giờ còn lại, cảnh báo quá hạn OVERDUE / DUE_SOON và tình trạng tồn kho).',
+  })
+  @ApiQuery({
+    name: 'code',
+    required: true,
+    example: 'AST-001',
+    description: 'Nội dung chuỗi quét QR Code, mã tài sản (AST-001) hoặc UUID',
+  })
+  @ApiResponse({ status: 200, description: 'Thông tin thiết bị và danh mục phụ tùng thay thế định kỳ.' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy thiết bị.' })
+  scanQr(@Query('code') code: string) {
+    return this.assetsService.scanQrAndGetInspectionDetails(code);
+  }
+
+  @Get('inspect/:identifier')
+  @ApiOperation({
+    summary: 'Tra cứu kiểm tra thiết bị qua mã định danh / QR param',
+    description: 'Truyền trực tiếp mã QR, mã code hoặc Asset ID vào URL path.',
+  })
+  @ApiParam({
+    name: 'identifier',
+    example: 'AST-001',
+    description: 'Mã QR hoặc Asset ID hoặc Asset Code (VD: AST-001 hoặc UUID)',
+  })
+  inspectByIdentifier(@Param('identifier') identifier: string) {
+    return this.assetsService.scanQrAndGetInspectionDetails(identifier);
+  }
+
+  // 4. ENDPOINT: XEM CHI TIẾT 1 TÀI SẢN
   @Get(':id')
   @ApiOperation({
     summary: 'Xem thông tin chi tiết của 1 tài sản',
