@@ -62,6 +62,3 @@ mobile/ios/Flutter/Flutter.framework
 # Docker data volume directories
 postgres_data/
 redis_data/
-
-# Documentation (excluded as requested)
-docs/

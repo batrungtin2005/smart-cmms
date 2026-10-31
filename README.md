@@ -20,7 +20,7 @@ Hệ thống giải quyết triệt để các tồn tại của phương pháp 
 
 | Mã SV | Vai trò | Trọng tâm công việc | Chi tiết phân công |
 |---|---|---|---|
-| **SV01 (Leader/Bạn)** | **Team Lead & Core Backend / Security** | **Trực tiếp Code:** Module Auth (JWT, RBAC), Quản lý người dùng, Hạ tầng Common (Guards, Interceptors, Filters, Base Entity).<br>**Điều phối:** Đặc tả BPMN/SRS, Thiết kế ERD Database, Review PR, nghiệm thu | [Xem chi tiết](docs/01_phan_cong_nhiem_vu.md#sv01--team-leader--core-backend--security-engineer-bạn) |
+| **SV01 (Leader/Bạn)** | **Team Lead & Core Backend / Security** | Module Auth (JWT, RBAC), Quản lý người dùng, Hạ tầng Common (Guards, Interceptors, Filters, Base Entity).<br>
 | **SV02** | **Backend Dev 1 (Asset & Inventory)** | Module Quản lý Thiết bị (`Asset`), Vị trí (`Location`), Phụ tùng (`Parts`), Lịch sử bảo trì, Seed 300 thiết bị | [Xem chi tiết](docs/01_phan_cong_nhiem_vu.md#sv02--backend-developer-asset-parts--inventory) |
 | **SV03** | **Backend Dev 2 (Work Order & Engine)** | Module Phiếu công việc (`WorkOrder`), Lịch định kỳ 3 kiểu (`Schedule`), Tính MTTR/MTBF, API Sync Idempotency | [Xem chi tiết](docs/01_phan_cong_nhiem_vu.md#sv03--backend-developer-work-order-maintenance--sync-engine) |
 | **SV04** | **Frontend Web Dev (Admin Portal)** | Ứng dụng Web React + TypeScript: Dashboard KPI, Quản lý tài sản, Kanban Work Order, Lịch bảo trì, Kho | [Xem chi tiết](docs/01_phan_cong_nhiem_vu.md#sv04--frontend-web-developer-admin--manager-portal) |
@@ -57,7 +57,8 @@ smart-cmms/
 │   ├── 01_phan_cong_nhiem_vu.md # Phân công chi tiết từng tuần & RACI Matrix
 │   ├── 02_kien_truc_va_database.md # Thiết kế 10 bảng Database chuẩn & Workflow
 │   ├── 03_quy_trinh_git_va_pr.md# Quy tắc nhánh & Pull Request review
-│   └── 04_huong_dan_cai_dat.md  # Cẩm nang cài đặt chi tiết cho từng máy
+│   ├── 04_huong_dan_cai_dat.md  # Cẩm nang cài đặt chi tiết cho từng máy
+│   └── 05_quy_tac_lam_viec_nhom.md # Quy tắc làm việc nhóm, họp, deadline & chế tài
 ├── docker-compose.yml           # Khởi chạy PostgreSQL 16, pgAdmin và Redis
 ├── .env.example                 # Mẫu cấu hình môi trường chuẩn
 └── .github/workflows/ci.yml     # Tự động hóa CI/CD kiểm thử và build
