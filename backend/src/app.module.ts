@@ -3,6 +3,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 
+import { LocationsModule } from './modules/locations/locations.module';
+import { AssetsModule } from './modules/assets/assets.module';
+import { PartsModule } from './modules/parts/parts.module';
+import { HistoryModule } from './modules/history/history.module';
+
 @Module({
   imports: [
     // Biến môi trường toàn cục
@@ -31,9 +36,14 @@ import { ScheduleModule } from '@nestjs/schedule';
       }),
     }),
 
-    // TODO: Các thành viên khi code module của mình sẽ import vào đây:
+    // Module do SV02 phụ trách (Asset, Location, Parts, History)
+    LocationsModule,
+    AssetsModule,
+    PartsModule,
+    HistoryModule,
+
+    // TODO: Các thành viên khi code module của mình sẽ import tiếp vào đây:
     // AuthModule (SV01 - Leader phụ trách)
-    // AssetsModule, LocationsModule, PartsModule, HistoryModule (SV02 phụ trách)
     // WorkOrdersModule, SchedulesModule, ReportsModule, SyncModule (SV03 phụ trách)
   ],
 })
