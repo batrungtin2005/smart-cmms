@@ -20,8 +20,7 @@
 
 ## 2. PHÂN CÔNG CÔNG VIỆC CHI TIẾT CHO TỪNG THÀNH VIÊN
 
-### 👑 SV01 – Team Leader & Core Backend / Security Engineer (BẠN)
-* **Mục tiêu:** Giữ vai trò nhạc trưởng điều phối toàn đội ngũ, đồng thời **trực tiếp lập trình phần xương sống bảo mật và hạ tầng dùng chung (Core Architecture)** mà toàn bộ các thành viên khác phải dựa vào để chạy.
+### 👑 SV01 – Team Leader & Core Backend / Security Engineer
 * **Đầu việc cụ thể:**
   1. **Nhiệm vụ Quản lý & Thiết kế (Leader & BA):**
      - Thiết lập GitHub Organization/Repository, cấp quyền, cấu hình Branch Protection (yêu cầu ít nhất 1 PR approval trước khi merge vào `develop`/`main`).
