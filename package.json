@@ -1,0 +1,31 @@
+{
+  "name": "smart-cmms-workspace",
+  "version": "1.0.0",
+  "description": "DT05 - Smart CMMS: Hệ thống quản lý vận hành bảo trì thiết bị và tài sản kỹ thuật - Zentech Company",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "npm run start:dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build:backend": "npm run build --workspace=backend",
+    "build:frontend": "npm run build --workspace=frontend",
+    "test:backend": "npm run test --workspace=backend",
+    "db:up": "docker compose up -d postgres pgadmin",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f postgres"
+  },
+  "keywords": [
+    "cmms",
+    "maintenance",
+    "nestjs",
+    "react",
+    "flutter",
+    "postgresql",
+    "zentech"
+  ],
+  "author": "Smart CMMS Team",
+  "license": "ISC"
+}

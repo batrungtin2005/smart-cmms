@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # =======================================================
+  # 1. DATABASE: PostgreSQL 16
+  # =======================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: smart_cmms_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-smart_cmms_db}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_NAME:-smart_cmms_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cmms_network
+
+  # =======================================================
+  # 2. DATABASE GUI: pgAdmin 4 (Quản lý trực quan DB)
+  # =======================================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: smart_cmms_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@smartcmms.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cmms_network
+
+  # =======================================================
+  # 3. CACHE & QUEUE: Redis (Tuỳ chọn cho Bull Queue/Cache)
+  # =======================================================
+  redis:
+    image: redis:7-alpine
+    container_name: smart_cmms_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - cmms_network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  cmms_network:
+    driver: bridge

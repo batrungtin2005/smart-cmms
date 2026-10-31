@@ -1,0 +1,67 @@
+# Operating System Files
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing and Coverage
+coverage/
+*.lcov
+.nyc_output
+
+# Production Build Artifacts
+dist/
+build/
+*.tsbuildinfo
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# IDE & Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Flutter / Dart specific
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/build/
+mobile/.pub-cache/
+mobile/.pub/
+mobile/*.iml
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/ios/Flutter/Generated.xcconfig
+mobile/ios/Flutter/app.framework
+mobile/ios/Flutter/Flutter.framework
+
+# Docker data volume directories
+postgres_data/
+redis_data/
+
+# Documentation (excluded as requested)
+docs/
