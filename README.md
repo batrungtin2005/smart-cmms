@@ -57,7 +57,8 @@ smart-cmms/
 │   ├── 01_phan_cong_nhiem_vu.md # Phân công chi tiết từng tuần & RACI Matrix
 │   ├── 02_kien_truc_va_database.md # Thiết kế 10 bảng Database chuẩn & Workflow
 │   ├── 03_quy_trinh_git_va_pr.md# Quy tắc nhánh & Pull Request review
-│   └── 04_huong_dan_cai_dat.md  # Cẩm nang cài đặt chi tiết cho từng máy
+│   ├── 04_huong_dan_cai_dat.md  # Cẩm nang cài đặt chi tiết cho từng máy
+│   └── 05_quy_tac_lam_viec_nhom.md # Quy tắc làm việc nhóm, họp, deadline & chế tài
 ├── docker-compose.yml           # Khởi chạy PostgreSQL 16, pgAdmin và Redis
 ├── .env.example                 # Mẫu cấu hình môi trường chuẩn
 └── .github/workflows/ci.yml     # Tự động hóa CI/CD kiểm thử và build
