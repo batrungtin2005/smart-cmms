@@ -20,7 +20,7 @@ Hệ thống giải quyết triệt để các tồn tại của phương pháp 
 
 | Mã SV | Vai trò | Trọng tâm công việc | Chi tiết phân công |
 |---|---|---|---|
-| **SV01 (Leader/Bạn)** | **Team Lead & Core Backend / Security** | **Trực tiếp Code:** Module Auth (JWT, RBAC), Quản lý người dùng, Hạ tầng Common (Guards, Interceptors, Filters, Base Entity).<br>**Điều phối:** Đặc tả BPMN/SRS, Thiết kế ERD Database, Review PR, nghiệm thu | [Xem chi tiết](docs/01_phan_cong_nhiem_vu.md#sv01--team-leader--core-backend--security-engineer-bạn) |
+| **SV01 (Leader/Bạn)** | **Team Lead & Core Backend / Security** | Module Auth (JWT, RBAC), Quản lý người dùng, Hạ tầng Common (Guards, Interceptors, Filters, Base Entity).<br>
 | **SV02** | **Backend Dev 1 (Asset & Inventory)** | Module Quản lý Thiết bị (`Asset`), Vị trí (`Location`), Phụ tùng (`Parts`), Lịch sử bảo trì, Seed 300 thiết bị | [Xem chi tiết](docs/01_phan_cong_nhiem_vu.md#sv02--backend-developer-asset-parts--inventory) |
 | **SV03** | **Backend Dev 2 (Work Order & Engine)** | Module Phiếu công việc (`WorkOrder`), Lịch định kỳ 3 kiểu (`Schedule`), Tính MTTR/MTBF, API Sync Idempotency | [Xem chi tiết](docs/01_phan_cong_nhiem_vu.md#sv03--backend-developer-work-order-maintenance--sync-engine) |
 | **SV04** | **Frontend Web Dev (Admin Portal)** | Ứng dụng Web React + TypeScript: Dashboard KPI, Quản lý tài sản, Kanban Work Order, Lịch bảo trì, Kho | [Xem chi tiết](docs/01_phan_cong_nhiem_vu.md#sv04--frontend-web-developer-admin--manager-portal) |
