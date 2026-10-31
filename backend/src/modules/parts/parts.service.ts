@@ -12,10 +12,16 @@ import {
   PartTransaction,
   TransactionType,
 } from './entities/part-transaction.entity';
+import { Asset, AssetStatus } from '../assets/entities/asset.entity';
+import {
+  AssetHistory,
+  MaintenanceEventType,
+} from '../history/entities/asset-history.entity';
 import {
   AdjustStockDto,
   CreateAssetPartBomDto,
   CreatePartDto,
+  IssuePartToAssetDto,
 } from './dto/create-part.dto';
 
 @Injectable()
@@ -150,6 +156,159 @@ export class PartsService {
 
       return savedTx;
     } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  // =====================================================================================
+  // LOGIC CỐT LÕI: XUẤT PHỤ TÙNG SỬA CHỮA CHO TÀI SẢN
+  // 1. Tự động trừ số lượng tồn kho trong bảng parts (Pessimistic Lock chống âm kho)
+  // 2. Tự động ghi vết vào bảng part_transactions
+  // 3. Tự động ghi 1 dòng mới vào bảng lịch sử sửa chữa asset_maintenance_history
+  // =====================================================================================
+  async issuePartToAsset(dto: IssuePartToAssetDto) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // 1. Khóa bi quan (Pessimistic Write Lock) trên bản ghi phụ tùng
+      const part = await queryRunner.manager.findOne(Part, {
+        where: { id: dto.partId, isActive: true },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!part) {
+        throw new NotFoundException(`Không tìm thấy phụ tùng với ID: ${dto.partId}`);
+      }
+
+      // 2. Kiểm tra tồn kho an toàn
+      const stockBefore = part.currentStock;
+      if (stockBefore < dto.quantity) {
+        throw new BadRequestException(
+          `Không đủ số lượng phụ tùng trong kho để xuất! Phụ tùng '${part.name}' (Mã: ${part.partCode}) hiện chỉ còn tồn ${stockBefore} ${part.unit}, yêu cầu xuất ${dto.quantity} ${part.unit}.`,
+        );
+      }
+
+      // 3. Kiểm tra thông tin thiết bị / tài sản nhận phụ tùng
+      const asset = await queryRunner.manager.findOne(Asset, {
+        where: { id: dto.assetId, isActive: true },
+      });
+
+      if (!asset) {
+        throw new NotFoundException(`Không tìm thấy tài sản / thiết bị với ID: ${dto.assetId}`);
+      }
+
+      // 4. TRỪ SỐ LƯỢNG TỒN KHO TRONG BẢNG PARTS
+      const stockAfter = stockBefore - dto.quantity;
+      part.currentStock = stockAfter;
+      await queryRunner.manager.save(part);
+
+      // 5. GHI LOG BIẾN ĐỘNG KHO (part_transactions)
+      const costParts = Number(part.unitPrice) * dto.quantity;
+      const partTx = queryRunner.manager.create(PartTransaction, {
+        partId: part.id,
+        workOrderId: dto.workOrderId || null,
+        transactionType: TransactionType.EXPORT,
+        quantity: dto.quantity,
+        stockBefore,
+        stockAfter,
+        unitPrice: part.unitPrice,
+        referenceCode: dto.workOrderId
+          ? `WO-${dto.workOrderId.substring(0, 8).toUpperCase()}`
+          : `EXP-${asset.assetCode}`,
+        performedById: dto.performedById || null,
+        notes: dto.reason || `Xuất ${dto.quantity} ${part.unit} thay thế cho thiết bị ${asset.assetCode} - ${asset.name}`,
+      });
+      await queryRunner.manager.save(partTx);
+
+      // 6. TỰ ĐỘNG GHI MỘT DÒNG MỚI VÀO BẢNG LỊCH SỬ SỬA CHỮA (AssetHistory)
+      const eventType = dto.eventType || MaintenanceEventType.PART_REPLACEMENT;
+      const isBreakdown =
+        eventType === MaintenanceEventType.BREAKDOWN ||
+        eventType === MaintenanceEventType.CORRECTIVE_REPAIR;
+
+      const laborCost = dto.laborCost || 0;
+      const totalCost = costParts + laborCost;
+
+      const historyLog = queryRunner.manager.create(AssetHistory, {
+        assetId: asset.id,
+        workOrderId: dto.workOrderId || null,
+        eventType,
+        title: `Thay thế phụ tùng ${part.name} (${dto.quantity} ${part.unit})`,
+        description:
+          dto.reason ||
+          `Xuất kho và lắp đặt ${dto.quantity} ${part.unit} ${part.name} (Mã: ${part.partCode}) cho máy ${asset.assetCode}.`,
+        repairStartTime: new Date(),
+        repairEndTime: new Date(),
+        actualRepairTimeHours: dto.actualRepairTimeHours || 0,
+        downtimeHours: dto.downtimeHours || 0,
+        operatingHoursAtFailure: Number(asset.operatingHours || 0),
+        isFailureCounted: isBreakdown,
+        failureCause: dto.reason || 'Hao mòn cơ khí / Thay thế phụ tùng định kỳ',
+        actionTaken: `Đã thay thế ${dto.quantity} ${part.unit} ${part.name} mới từ kho vào máy.`,
+        statusBefore: asset.status,
+        statusAfter: AssetStatus.OPERATIONAL,
+        partsReplaced: [
+          {
+            partId: part.id,
+            partCode: part.partCode,
+            partName: part.name,
+            quantity: dto.quantity,
+            unitPrice: Number(part.unitPrice),
+            totalPrice: costParts,
+          },
+        ],
+        costParts,
+        costLabor: laborCost,
+        totalCost,
+        performedById: dto.performedById || null,
+      });
+
+      const savedHistory = await queryRunner.manager.save(historyLog);
+
+      // 7. CẬP NHẬT TRẠNG THÁI THIẾT BỊ NẾU ĐANG DỪNG MÁY / BẢO TRÌ
+      if (asset.status !== AssetStatus.OPERATIONAL) {
+        asset.status = AssetStatus.OPERATIONAL;
+        await queryRunner.manager.save(asset);
+      }
+
+      // Hoàn tất transaction toàn vẹn ACID
+      await queryRunner.commitTransaction();
+
+      return {
+        success: true,
+        message: 'Xuất phụ tùng và ghi nhật ký lịch sử bảo trì thành công',
+        partIssued: {
+          partId: part.id,
+          partCode: part.partCode,
+          name: part.name,
+          quantityIssued: dto.quantity,
+          unit: part.unit,
+          stockBefore,
+          stockAfter,
+          isLowStock: stockAfter <= part.minimumStock,
+        },
+        targetAsset: {
+          assetId: asset.id,
+          assetCode: asset.assetCode,
+          name: asset.name,
+          currentStatus: asset.status,
+        },
+        maintenanceHistoryLog: {
+          historyId: savedHistory.id,
+          eventType: savedHistory.eventType,
+          title: savedHistory.title,
+          costParts,
+          totalCost,
+          recordedAt: savedHistory.createdAt,
+        },
+      };
+    } catch (error) {
+      // Rollback toàn bộ nếu có bất kỳ lỗi nào xảy ra
       await queryRunner.rollbackTransaction();
       throw error;
     } finally {
