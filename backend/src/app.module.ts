@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AssetsModule } from './modules/assets/assets.module';
 
 @Module({
   imports: [
@@ -33,7 +34,8 @@ import { ScheduleModule } from '@nestjs/schedule';
 
     // TODO: Các thành viên khi code module của mình sẽ import vào đây:
     // AuthModule (SV01 - Leader phụ trách)
-    // AssetsModule, LocationsModule, PartsModule, HistoryModule (SV02 phụ trách)
+    AssetsModule, // SV02
+    // LocationsModule, PartsModule, HistoryModule (SV02 phụ trách)
     // WorkOrdersModule, SchedulesModule, ReportsModule, SyncModule (SV03 phụ trách)
   ],
 })
