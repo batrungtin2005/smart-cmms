@@ -14,7 +14,7 @@ import {
   CreatePartDto,
 } from './dto/create-part.dto';
 
-@Controller('api/v1/parts')
+@Controller('parts')
 export class PartsController {
   constructor(private readonly partsService: PartsService) {}
 

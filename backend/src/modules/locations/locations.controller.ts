@@ -11,7 +11,7 @@ import {
 import { LocationsService } from './locations.service';
 import { CreateLocationDto, UpdateLocationDto } from './dto/create-location.dto';
 
-@Controller('api/v1/locations')
+@Controller('locations')
 export class LocationsController {
   constructor(private readonly locationsService: LocationsService) {}
 
