@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
-
 import { LocationsModule } from './modules/locations/locations.module';
 import { AssetsModule } from './modules/assets/assets.module';
 import { PartsModule } from './modules/parts/parts.module';
