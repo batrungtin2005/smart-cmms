@@ -3,10 +3,11 @@ import {
   Get,
   Post,
   Param,
+  Query,
   Body,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { HistoryService } from './history.service';
 import { CreateAssetHistoryDto } from './dto/create-history.dto';
 
@@ -14,6 +15,14 @@ import { CreateAssetHistoryDto } from './dto/create-history.dto';
 @Controller('history')
 export class HistoryController {
   constructor(private readonly historyService: HistoryService) {}
+
+  // Lấy báo cáo tổng hợp MTTR, MTBF & Availability toàn bộ thiết bị (hoặc theo xưởng)
+  @Get('metrics/overview')
+  @ApiOperation({ summary: 'Lấy báo cáo MTTR, MTBF và Availability toàn bộ 300+ thiết bị' })
+  @ApiQuery({ name: 'locationId', required: false, description: 'Lọc theo ID phân xưởng' })
+  getAllMetrics(@Query('locationId') locationId?: string) {
+    return this.historyService.calculateAllAssetsReliability(locationId);
+  }
 
   // Lấy dòng thời gian lịch sử sự kiện bảo trì của máy
   @Get('asset/:assetId')
