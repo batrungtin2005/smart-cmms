@@ -28,9 +28,7 @@ assets/
 ├── entities/
 │   └── asset.entity.ts
 ├── dto/
-│   ├── create-asset.dto.ts
-│   ├── update-asset.dto.ts
-│   └── query-asset.dto.ts
+│   └── create-asset.dto.ts (chứa CreateAssetDto, UpdateAssetDto, QueryAssetDto)
 ├── assets.controller.ts
 ├── assets.service.ts
 └── assets.module.ts
