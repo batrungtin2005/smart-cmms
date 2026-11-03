@@ -1,108 +1,94 @@
-<<<<<<< HEAD
-import React from "react";
+import { Calendar as CalendarIcon, Clock } from "lucide-react";
 
-=======
->>>>>>> 0058a68 (feat(frontend): complete week 1-2 layout and auth)
 export default function Schedules() {
-  return (
-    <div style={{ padding: "24px", fontFamily: "Arial, sans-serif" }}>
-      <h2>Lịch Bảo Dưỡng Dự Phòng (Schedules)</h2>
-      <p>
-        Xem lịch trình theo tháng/tuần và cấu hình 3 kiểu lịch bảo dưỡng tự
-        động.
-      </p>
+  const schedules = [
+    {
+      id: "SCH-01",
+      name: "Bảo dưỡng định kỳ máy nén khí",
+      cycle: "Hàng tháng",
+      nextDate: "2026-11-15",
+      status: "Sắp tới",
+    },
+    {
+      id: "SCH-02",
+      name: "Tra mỡ băng tải Xưởng B",
+      cycle: "Hàng tuần",
+      nextDate: "2026-11-08",
+      status: "Sắp tới",
+    },
+  ];
 
-      <div
+  return (
+    <div>
+      <h2 style={{ marginTop: 0, marginBottom: "20px", color: "#0f172a" }}>
+        Lịch bảo trì định kỳ
+      </h2>
+
+      <table
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: "20px",
-          marginTop: "20px",
+          width: "100%",
+          borderCollapse: "collapse",
+          background: "#fff",
+          borderRadius: "8px",
+          overflow: "hidden",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
         }}
       >
-        <div
-          style={{
-            background: "#fff",
-            padding: "20px",
-            borderRadius: "8px",
-            border: "1px solid #e5e7eb",
-          }}
-        >
-          <h3>1. Theo Thời gian (Time-based)</h3>
-          <p style={{ color: "#6b7280", fontSize: "14px" }}>
-            Cấu hình lịch chạy định kỳ theo tuần hoặc theo tháng (VD: Chủ nhật
-            hàng tuần).
-          </p>
-          <button
+        <thead>
+          <tr
             style={{
-              padding: "6px 12px",
-              background: "#2563eb",
-              color: "#fff",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
+              background: "#f8fafc",
+              textAlign: "left",
+              borderBottom: "1px solid #e2e8f0",
             }}
           >
-            Cấu hình
-          </button>
-        </div>
-        <div
-          style={{
-            background: "#fff",
-            padding: "20px",
-            borderRadius: "8px",
-            border: "1px solid #e5e7eb",
-          }}
-        >
-          <h3>2. Theo Số giờ chạy (Meter-based)</h3>
-          <p style={{ color: "#6b7280", fontSize: "14px" }}>
-            Kích hoạt lịch bảo dưỡng khi máy đạt số giờ hoạt động nhất định (VD:
-            500 giờ).
-          </p>
-          <button
-            style={{
-              padding: "6px 12px",
-              background: "#2563eb",
-              color: "#fff",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
-            }}
-          >
-            Cấu hình
-          </button>
-        </div>
-        <div
-          style={{
-            background: "#fff",
-            padding: "20px",
-            borderRadius: "8px",
-            border: "1px solid #e5e7eb",
-          }}
-        >
-          <h3>3. Theo Ngưỡng cảnh báo</h3>
-          <p style={{ color: "#6b7280", fontSize: "14px" }}>
-            Tạo lệnh tự động khi thông số cảm biến vượt ngưỡng an toàn (nhiệt
-            độ, áp suất).
-          </p>
-          <button
-            style={{
-              padding: "6px 12px",
-              background: "#2563eb",
-              color: "#fff",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
-            }}
-          >
-            Cấu hình
-          </button>
-        </div>
-      </div>
+            <th style={{ padding: "12px 16px" }}>Mã kế hoạch</th>
+            <th style={{ padding: "12px 16px" }}>Tên công việc</th>
+            <th style={{ padding: "12px 16px" }}>Chu kỳ</th>
+            <th style={{ padding: "12px 16px" }}>Ngày thực hiện tiếp theo</th>
+            <th style={{ padding: "12px 16px" }}>Trạng thái</th>
+          </tr>
+        </thead>
+        <tbody>
+          {schedules.map((item) => (
+            <tr key={item.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
+              <td style={{ padding: "12px 16px", fontWeight: "bold" }}>
+                {item.id}
+              </td>
+              <td style={{ padding: "12px 16px" }}>{item.name}</td>
+              <td style={{ padding: "12px 16px" }}>{item.cycle}</td>
+              <td style={{ padding: "12px 16px" }}>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <CalendarIcon size={16} color="#64748b" /> {item.nextDate}
+                </span>
+              </td>
+              <td style={{ padding: "12px 16px" }}>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    padding: "4px 8px",
+                    background: "#e0f2fe",
+                    color: "#0369a1",
+                    borderRadius: "4px",
+                    fontSize: "12px",
+                    fontWeight: "bold",
+                  }}
+                >
+                  <Clock size={14} /> {item.status}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 0058a68 (feat(frontend): complete week 1-2 layout and auth)

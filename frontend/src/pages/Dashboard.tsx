@@ -1,129 +1,111 @@
-<<<<<<< HEAD
-import React from "react";
+import { Wrench, CheckCircle2, AlertTriangle, Package } from "lucide-react";
 
-=======
->>>>>>> 0058a68 (feat(frontend): complete week 1-2 layout and auth)
 export default function Dashboard() {
+  const stats = [
+    {
+      title: "Tổng thiết bị",
+      value: "24",
+      icon: Wrench,
+      color: "#0284c7",
+      bg: "#e0f2fe",
+    },
+    {
+      title: "Lệnh bảo trì cần làm",
+      value: "5",
+      icon: AlertTriangle,
+      color: "#d97706",
+      bg: "#fef3c7",
+    },
+    {
+      title: "Đã hoàn thành",
+      value: "18",
+      icon: CheckCircle2,
+      color: "#16a34a",
+      bg: "#dcfce7",
+    },
+    {
+      title: "Phụ tùng sắp hết",
+      value: "3",
+      icon: Package,
+      color: "#dc2626",
+      bg: "#fee2e2",
+    },
+  ];
+
   return (
-    <div style={{ padding: "24px", fontFamily: "Arial, sans-serif" }}>
-      <h2>Dashboard KPI & Tổng quan hệ thống Smart CMMS</h2>
-      <p>
-        Giám sát chỉ số vận hành, bảo trì thiết bị và quản lý tác vụ nhà máy.
-      </p>
+    <div>
+      <h2 style={{ marginTop: 0, marginBottom: "20px", color: "#0f172a" }}>
+        Tổng quan hệ thống (Dashboard)
+      </h2>
 
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
           gap: "16px",
-          marginTop: "20px",
+          marginBottom: "30px",
         }}
       >
-        <div
-          style={{
-            background: "#fff",
-            padding: "20px",
-            borderRadius: "8px",
-            border: "1px solid #e5e7eb",
-          }}
-        >
-          <h4 style={{ margin: "0 0 10px 0", color: "#6b7280" }}>
-            Tổng số thiết bị
-          </h4>
-          <p
-            style={{
-              fontSize: "28px",
-              fontWeight: "bold",
-              color: "#2563eb",
-              margin: 0,
-            }}
-          >
-            300 máy
-          </p>
-          <span style={{ fontSize: "12px", color: "#16a34a" }}>
-            ✓ Đã đồng bộ CSDL
-          </span>
-        </div>
-        <div
-          style={{
-            background: "#fff",
-            padding: "20px",
-            borderRadius: "8px",
-            border: "1px solid #e5e7eb",
-          }}
-        >
-          <h4 style={{ margin: "0 0 10px 0", color: "#6b7280" }}>
-            Chỉ số MTTR
-          </h4>
-          <p
-            style={{
-              fontSize: "28px",
-              fontWeight: "bold",
-              color: "#16a34a",
-              margin: 0,
-            }}
-          >
-            2.4h
-          </p>
-          <span style={{ fontSize: "12px", color: "#6b7280" }}>
-            Thời gian sửa chữa trung bình
-          </span>
-        </div>
-        <div
-          style={{
-            background: "#fff",
-            padding: "20px",
-            borderRadius: "8px",
-            border: "1px solid #e5e7eb",
-          }}
-        >
-          <h4 style={{ margin: "0 0 10px 0", color: "#6b7280" }}>
-            Chỉ số MTBF
-          </h4>
-          <p
-            style={{
-              fontSize: "28px",
-              fontWeight: "bold",
-              color: "#d97706",
-              margin: 0,
-            }}
-          >
-            350h
-          </p>
-          <span style={{ fontSize: "12px", color: "#6b7280" }}>
-            Thời gian giữa các lần hỏng
-          </span>
-        </div>
-        <div
-          style={{
-            background: "#fff",
-            padding: "20px",
-            borderRadius: "8px",
-            border: "1px solid #e5e7eb",
-          }}
-        >
-          <h4 style={{ margin: "0 0 10px 0", color: "#6b7280" }}>
-            Cảnh báo quá hạn
-          </h4>
-          <p
-            style={{
-              fontSize: "28px",
-              fontWeight: "bold",
-              color: "#dc2626",
-              margin: 0,
-            }}
-          >
-            3 phiếu
-          </p>
-          <span style={{ fontSize: "12px", color: "#dc2626" }}>
-            ⚠️ Cần xử lý gấp
-          </span>
-        </div>
+        {stats.map((s, index) => {
+          const IconComponent = s.icon;
+          return (
+            <div
+              key={index}
+              style={{
+                background: "#fff",
+                padding: "20px",
+                borderRadius: "8px",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                display: "flex",
+                alignItems: "center",
+                gap: "16px",
+              }}
+            >
+              <div
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "8px",
+                  background: s.bg,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <IconComponent size={24} color={s.color} />
+              </div>
+              <div>
+                <p style={{ margin: 0, color: "#64748b", fontSize: "14px" }}>
+                  {s.title}
+                </p>
+                <h3
+                  style={{
+                    margin: "4px 0 0 0",
+                    color: "#0f172a",
+                    fontSize: "24px",
+                  }}
+                >
+                  {s.value}
+                </h3>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div
+        style={{
+          background: "#fff",
+          padding: "20px",
+          borderRadius: "8px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+        }}
+      >
+        <h3 style={{ marginTop: 0, color: "#0f172a" }}>Lịch bảo trì gần đây</h3>
+        <p style={{ color: "#64748b" }}>
+          Hệ thống hoạt động bình thường. Không có cảnh báo khẩn cấp.
+        </p>
       </div>
     </div>
   );
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 0058a68 (feat(frontend): complete week 1-2 layout and auth)

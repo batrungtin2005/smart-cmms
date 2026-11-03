@@ -1,77 +1,134 @@
-<<<<<<< HEAD
-import React, { useState } from "react";
-=======
-import { useState } from "react";
->>>>>>> 0058a68 (feat(frontend): complete week 1-2 layout and auth)
+import { ClipboardList, Plus } from "lucide-react";
 
 export default function WorkOrders() {
-  const [orders] = useState([
-    { id: "WO-101", title: "Sửa lỗi áp suất máy nén", status: "OPEN" },
-    { id: "WO-102", title: "Thay dầu hệ thống lạnh", status: "ASSIGNED" },
-    { id: "WO-103", title: "Kiểm tra mạch điện chính", status: "IN_PROGRESS" },
-    { id: "WO-104", title: "Bảo dưỡng định kỳ quạt gió", status: "COMPLETED" },
-    { id: "WO-105", title: "Đổi mới bộ lọc thô", status: "CLOSED" },
-  ]);
-
-  const statuses = ["OPEN", "ASSIGNED", "IN_PROGRESS", "COMPLETED", "CLOSED"];
+  const orders = [
+    {
+      id: "WO-001",
+      title: "Thay lọc dầu máy nén khí",
+      priority: "HIGH",
+      assignee: "Nguyễn Văn A",
+      status: "IN_PROGRESS",
+    },
+    {
+      id: "WO-002",
+      title: "Kiểm tra động cơ băng tải",
+      priority: "MEDIUM",
+      assignee: "Trần Văn B",
+      status: "PENDING",
+    },
+  ];
 
   return (
-    <div style={{ padding: "24px", fontFamily: "Arial, sans-serif" }}>
-      <h2>Quản lý Phiếu Công Việc (Work Orders Kanban)</h2>
-
+    <div>
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(5, 1fr)",
-          gap: "12px",
-          marginTop: "20px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "20px",
         }}
       >
-        {statuses.map((stt) => (
-          <div
-            key={stt}
+        <h2 style={{ margin: 0, color: "#0f172a" }}>
+          Quản lý Phiếu bảo trì (Work Orders)
+        </h2>
+        <button
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "10px 16px",
+            background: "#0284c7",
+            color: "#fff",
+            border: "none",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontWeight: "bold",
+          }}
+        >
+          <Plus size={18} /> Tạo phiếu mới
+        </button>
+      </div>
+
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          background: "#fff",
+          borderRadius: "8px",
+          overflow: "hidden",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+        }}
+      >
+        <thead>
+          <tr
             style={{
-              background: "#f3f4f6",
-              padding: "12px",
-              borderRadius: "8px",
-              minHeight: "300px",
+              background: "#f8fafc",
+              textAlign: "left",
+              borderBottom: "1px solid #e2e8f0",
             }}
           >
-            <h4
-              style={{
-                margin: "0 0 12px 0",
-                textAlign: "center",
-                color: "#374151",
-              }}
-            >
-              {stt}
-            </h4>
-            {orders
-              .filter((o) => o.status === stt)
-              .map((item) => (
-                <div
-                  key={item.id}
+            <th style={{ padding: "12px 16px" }}>Mã phiếu</th>
+            <th style={{ padding: "12px 16px" }}>Nội dung công việc</th>
+            <th style={{ padding: "12px 16px" }}>Mức độ ưu tiên</th>
+            <th style={{ padding: "12px 16px" }}>Người thực hiện</th>
+            <th style={{ padding: "12px 16px" }}>Trạng thái</th>
+          </tr>
+        </thead>
+        <tbody>
+          {orders.map((item) => (
+            <tr key={item.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
+              <td style={{ padding: "12px 16px", fontWeight: "bold" }}>
+                {item.id}
+              </td>
+              <td style={{ padding: "12px 16px" }}>
+                <span
                   style={{
-                    background: "#fff",
-                    padding: "10px",
-                    borderRadius: "6px",
-                    marginBottom: "10px",
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
                   }}
                 >
-                  <strong style={{ fontSize: "14px" }}>{item.id}</strong>
-                  <p style={{ fontSize: "13px", margin: "6px 0 0 0" }}>
-                    {item.title}
-                  </p>
-                </div>
-              ))}
-          </div>
-        ))}
-      </div>
+                  <ClipboardList size={16} color="#64748b" /> {item.title}
+                </span>
+              </td>
+              <td style={{ padding: "12px 16px" }}>
+                <span
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    fontSize: "12px",
+                    fontWeight: "bold",
+                    background:
+                      item.priority === "HIGH" ? "#fee2e2" : "#fef3c7",
+                    color: item.priority === "HIGH" ? "#b91c1c" : "#b45309",
+                  }}
+                >
+                  {item.priority === "HIGH" ? "Cao" : "Trung bình"}
+                </span>
+              </td>
+              <td style={{ padding: "12px 16px" }}>{item.assignee}</td>
+              <td style={{ padding: "12px 16px" }}>
+                <span
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    fontSize: "12px",
+                    fontWeight: "bold",
+                    background:
+                      item.status === "IN_PROGRESS" ? "#e0f2fe" : "#f1f5f9",
+                    color:
+                      item.status === "IN_PROGRESS" ? "#0369a1" : "#475569",
+                  }}
+                >
+                  {item.status === "IN_PROGRESS"
+                    ? "Đang xử lý"
+                    : "Chờ tiếp nhận"}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 0058a68 (feat(frontend): complete week 1-2 layout and auth)

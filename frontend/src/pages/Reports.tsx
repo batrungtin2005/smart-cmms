@@ -1,22 +1,17 @@
-<<<<<<< HEAD
-import React from "react";
+import { BarChart3, TrendingUp, ShieldAlert } from "lucide-react";
 
-=======
->>>>>>> 0058a68 (feat(frontend): complete week 1-2 layout and auth)
 export default function Reports() {
   return (
-    <div style={{ padding: "24px", fontFamily: "Arial, sans-serif" }}>
-      <h2>Báo cáo & Phân tích (Reports)</h2>
-      <p>
-        Thống kê thiết bị hỏng nhiều nhất và phân tích lịch sử bảo trì nhà máy.
-      </p>
+    <div>
+      <h2 style={{ marginTop: 0, marginBottom: "20px", color: "#0f172a" }}>
+        Báo cáo & Thống kê
+      </h2>
 
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(2, 1fr)",
+          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
           gap: "20px",
-          marginTop: "20px",
         }}
       >
         <div
@@ -24,50 +19,74 @@ export default function Reports() {
             background: "#fff",
             padding: "20px",
             borderRadius: "8px",
-            border: "1px solid #e5e7eb",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
           }}
         >
-          <h3>Top thiết bị hỏng nhiều nhất</h3>
-          <ul
-            style={{ paddingLeft: "20px", color: "#374151", lineHeight: "1.8" }}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              marginBottom: "12px",
+            }}
           >
-            <li>Máy nén khí trục vít #1 (Hỏng 5 lần/tháng)</li>
-            <li>Hệ thống điện lạnh trung tâm (Hỏng 3 lần/tháng)</li>
-            <li>Cần cẩu trục 5 tấn (Hỏng 2 lần/tháng)</li>
-          </ul>
+            <BarChart3 color="#0284c7" />
+            <h3 style={{ margin: 0 }}>Tần suất sự cố thiết bị</h3>
+          </div>
+          <p style={{ color: "#64748b", fontSize: "14px" }}>
+            Thống kê các thiết bị gặp sự cố sự cố nhiều nhất trong tháng.
+          </p>
         </div>
+
         <div
           style={{
             background: "#fff",
             padding: "20px",
             borderRadius: "8px",
-            border: "1px solid #e5e7eb",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
           }}
         >
-          <h3>Phân tích lịch sử bảo trì</h3>
-          <p style={{ color: "#6b7280", fontSize: "14px" }}>
-            Biểu đồ trực quan hóa chi phí, thời gian dừng máy và hiệu quả sửa
-            chữa theo từng quý trong năm.
-          </p>
           <div
             style={{
-              height: "100px",
-              background: "#f3f4f6",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              borderRadius: "4px",
-              color: "#9ca3af",
+              gap: "10px",
+              marginBottom: "12px",
             }}
           >
-            [Khu vực hiển thị biểu đồ Recharts]
+            <TrendingUp color="#16a34a" />
+            <h3 style={{ margin: 0 }}>Chi phí phụ tùng đã dùng</h3>
           </div>
+          <p style={{ color: "#64748b", fontSize: "14px" }}>
+            Tổng ngân sách đã chi cho việc thay thế vật tư, linh kiện.
+          </p>
+        </div>
+
+        <div
+          style={{
+            background: "#fff",
+            padding: "20px",
+            borderRadius: "8px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              marginBottom: "12px",
+            }}
+          >
+            <ShieldAlert color="#d97706" />
+            <h3 style={{ margin: 0 }}>Chỉ số MTTR / MTBF</h3>
+          </div>
+          <p style={{ color: "#64748b", fontSize: "14px" }}>
+            Thời gian trung bình xử lý sự cố và thời gian hoạt động giữa các lần
+            hỏng.
+          </p>
         </div>
       </div>
     </div>
   );
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 0058a68 (feat(frontend): complete week 1-2 layout and auth)
