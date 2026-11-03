@@ -1,5 +1,8 @@
+<<<<<<< HEAD
 import React from "react";
 
+=======
+>>>>>>> 0058a68 (feat(frontend): complete week 1-2 layout and auth)
 export default function Dashboard() {
   return (
     <div style={{ padding: "24px", fontFamily: "Arial, sans-serif" }}>
@@ -119,4 +122,8 @@ export default function Dashboard() {
       </div>
     </div>
   );
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 0058a68 (feat(frontend): complete week 1-2 layout and auth)

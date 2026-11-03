@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import React, { useState } from "react";
+=======
+import { useState } from "react";
+>>>>>>> 0058a68 (feat(frontend): complete week 1-2 layout and auth)
 
 export default function WorkOrders() {
   const [orders] = useState([
@@ -66,4 +70,8 @@ export default function WorkOrders() {
       </div>
     </div>
   );
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 0058a68 (feat(frontend): complete week 1-2 layout and auth)

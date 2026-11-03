@@ -1,5 +1,8 @@
+<<<<<<< HEAD
 import React from "react";
 
+=======
+>>>>>>> 0058a68 (feat(frontend): complete week 1-2 layout and auth)
 export default function Parts() {
   const partsList = [
     {
@@ -78,4 +81,8 @@ export default function Parts() {
       </table>
     </div>
   );
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 0058a68 (feat(frontend): complete week 1-2 layout and auth)
