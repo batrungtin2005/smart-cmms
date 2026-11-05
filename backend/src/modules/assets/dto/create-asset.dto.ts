@@ -219,19 +219,35 @@ export class QueryAssetDto {
 
   @ApiPropertyOptional({
     example: 'AST-001',
-    description: 'Tìm kiếm theo mã tài sản, tên thiết bị hoặc số seri',
+    description: 'Tìm kiếm theo mã tài sản (AST-xxx), tên thiết bị, model, nhà sản xuất hoặc số seri',
   })
   @IsOptional()
   @IsString()
   search?: string;
 
   @ApiPropertyOptional({
+    example: 'PH-500-2024',
+    description: 'Lọc cụ thể theo model máy',
+  })
+  @IsOptional()
+  @IsString()
+  model?: string;
+
+  @ApiPropertyOptional({
     enum: AssetStatus,
-    description: 'Lọc theo trạng thái vận hành',
+    description: 'Lọc theo trạng thái vận hành (OPERATIONAL, DOWN, MAINTENANCE, DECOMMISSIONED)',
   })
   @IsOptional()
   @IsEnum(AssetStatus)
   status?: AssetStatus;
+
+  @ApiPropertyOptional({
+    enum: AssetCriticality,
+    description: 'Lọc theo mức độ quan trọng (LOW, MEDIUM, HIGH, CRITICAL)',
+  })
+  @IsOptional()
+  @IsEnum(AssetCriticality)
+  criticality?: AssetCriticality;
 
   @ApiPropertyOptional({
     example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
