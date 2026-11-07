@@ -36,11 +36,6 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- BƯỚC 1: TẠO CÁC KIỂU DỮ LIỆU ENUM
 -- ================================================================================
 
--- Trạng thái người dùng
-DO $$ BEGIN
-    CREATE TYPE user_status_enum AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED');
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
 -- Trạng thái tài sản / thiết bị
 DO $$ BEGIN
     CREATE TYPE asset_status_enum AS ENUM (
@@ -135,12 +130,10 @@ EXCEPTION WHEN duplicate_object THEN null; END $$;
 -- BẢNG 1: roles — Vai trò / nhóm quyền
 -- ================================================================================
 CREATE TABLE IF NOT EXISTS roles (
-    id          UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id          SERIAL       PRIMARY KEY,
     name        VARCHAR(50)  NOT NULL UNIQUE,
     description VARCHAR(255) NULL,
-    permissions JSONB        NOT NULL DEFAULT '[]'::jsonb,
-    created_at  TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Dữ liệu mặc định (4 vai trò)
@@ -156,22 +149,21 @@ ON CONFLICT (name) DO NOTHING;
 -- ================================================================================
 CREATE TABLE IF NOT EXISTS users (
     id            UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
-    role_id       UUID         NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
-    employee_code VARCHAR(50)  NULL UNIQUE,
-    full_name     VARCHAR(150) NOT NULL,
-    email         VARCHAR(150) NOT NULL UNIQUE,
+    role_id       INTEGER      NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+    username      VARCHAR(50)  NOT NULL UNIQUE,
+    full_name     VARCHAR(100) NOT NULL,
+    email         VARCHAR(100) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,           -- bcrypt hash
-    phone         VARCHAR(20)  NULL,
+    phone_number  VARCHAR(20)  NULL,
     avatar_url    VARCHAR(500) NULL,
-    status        user_status_enum NOT NULL DEFAULT 'ACTIVE',
-    last_login_at TIMESTAMPTZ  NULL,
+    is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_email   ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id);
-CREATE INDEX IF NOT EXISTS idx_users_status  ON users(status);
+CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active);
 
 -- ================================================================================
 -- BẢNG 3: locations — Vị trí nhà xưởng (cấu trúc cây)
@@ -319,7 +311,7 @@ CREATE TABLE IF NOT EXISTS work_orders (
     asset_id         UUID        NOT NULL REFERENCES assets(id) ON DELETE RESTRICT,
     schedule_id      UUID        NULL REFERENCES maintenance_schedules(id) ON DELETE SET NULL,
     created_by_id    UUID        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    assigned_to_id   UUID        NULL REFERENCES users(id) ON DELETE SET NULL,
+    assigned_technician_id UUID  NULL REFERENCES users(id) ON DELETE SET NULL,
 
     title            VARCHAR(255) NOT NULL,
     description      TEXT         NULL,
@@ -331,10 +323,22 @@ CREATE TABLE IF NOT EXISTS work_orders (
     scheduled_start_date  DATE NULL,
     scheduled_end_date    DATE NULL,
 
-    -- Thời gian thực tế (kỹ thuật viên điền khi COMPLETED)
-    actual_start_time     TIMESTAMPTZ    NULL,
-    actual_end_time       TIMESTAMPTZ    NULL,
-    actual_duration_hours NUMERIC(10, 2) NULL,
+    -- Quản lý nhập thời điểm hỏng; KTV ghi thời điểm bắt đầu và hoàn thành.
+    breakdown_time           TIMESTAMPTZ NULL,
+    start_time               TIMESTAMPTZ NULL,
+    completed_time           TIMESTAMPTZ NULL,
+    actual_repair_time_hours  NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    -- Giờ dừng máy bao gồm cả thời gian chờ trước khi KTV bắt đầu sửa.
+    -- Chưa đủ hai mốc thời gian hoặc phiếu không có sự cố: trả 0.
+    downtime_hours NUMERIC(10, 2) GENERATED ALWAYS AS (
+        CASE WHEN breakdown_time IS NULL OR completed_time IS NULL THEN 0
+        ELSE EXTRACT(EPOCH FROM (completed_time - breakdown_time)) / 3600 END
+    ) STORED NOT NULL,
+    root_cause TEXT NULL, -- KTV chọn nguyên nhân hoặc nhập tự do khi hoàn thành
+    solution   TEXT NULL, -- KTV nhập biện pháp xử lý khi hoàn thành
+    CONSTRAINT chk_wo_completion_after_breakdown CHECK (
+        completed_time IS NULL OR breakdown_time IS NULL OR completed_time >= breakdown_time
+    ),
 
     -- Chi phí
     estimated_cost    NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
@@ -359,7 +363,7 @@ CREATE INDEX IF NOT EXISTS idx_wo_code       ON work_orders(work_order_code);
 CREATE INDEX IF NOT EXISTS idx_wo_asset      ON work_orders(asset_id);
 CREATE INDEX IF NOT EXISTS idx_wo_status     ON work_orders(status);
 CREATE INDEX IF NOT EXISTS idx_wo_priority   ON work_orders(priority);
-CREATE INDEX IF NOT EXISTS idx_wo_assigned   ON work_orders(assigned_to_id);
+CREATE INDEX IF NOT EXISTS idx_wo_assigned   ON work_orders(assigned_technician_id);
 CREATE INDEX IF NOT EXISTS idx_wo_schedule   ON work_orders(schedule_id);
 CREATE INDEX IF NOT EXISTS idx_wo_created_at ON work_orders(created_at);
 
@@ -562,7 +566,7 @@ DO $$
 DECLARE tbl TEXT;
 BEGIN
     FOREACH tbl IN ARRAY ARRAY[
-        'roles', 'users', 'locations', 'assets', 'parts',
+        'users', 'locations', 'assets', 'parts',
         'asset_part_boms', 'part_transactions', 'work_orders',
         'maintenance_schedules', 'asset_maintenance_history'
     ] LOOP

@@ -31,17 +31,20 @@ export class User {
   @Column({ name: 'phone_number', length: 20, nullable: true })
   phoneNumber: string;
 
-  @ManyToOne(() => Role, (role) => role.users, { eager: true })
+  @Column({ name: 'avatar_url', length: 500, nullable: true })
+  avatarUrl: string | null;
+
+  @ManyToOne(() => Role, (role) => role.users, { eager: true, nullable: false, onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'role_id' })
   role: Role;
 
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
 
   @OneToMany(() => WorkOrder, (workOrder) => workOrder.assignedTechnician)

@@ -6,7 +6,8 @@ import {
   Index,
 } from 'typeorm';
 import { AppBaseEntity } from '../../../common/base.entity';
-import { Asset, AssetStatus } from '../../assets/entities/asset.entity';
+import { Asset } from '../../assets/entities/asset.entity';
+import { AssetStatus } from '../../assets/entities/asset.enums';
 import { WorkOrder } from '../../work-orders/entities/work-order.entity';
 import { User } from '../../auth/entities/user.entity';
 
@@ -43,6 +44,7 @@ export class AssetHistory extends AppBaseEntity {
     name: 'event_type',
     type: 'enum',
     enum: MaintenanceEventType,
+    enumName: 'maintenance_event_type_enum',
     default: MaintenanceEventType.CORRECTIVE_REPAIR,
   })
   eventType: MaintenanceEventType;
@@ -122,6 +124,7 @@ export class AssetHistory extends AppBaseEntity {
     name: 'status_before',
     type: 'enum',
     enum: AssetStatus,
+    enumName: 'asset_status_enum',
     default: AssetStatus.DOWN,
   })
   statusBefore: AssetStatus;
@@ -130,12 +133,13 @@ export class AssetHistory extends AppBaseEntity {
     type: 'enum',
     name: 'status_after',
     enum: AssetStatus,
+    enumName: 'asset_status_enum',
     default: AssetStatus.OPERATIONAL,
   })
   statusAfter: AssetStatus;
 
   // Danh mục phụ tùng thay thế (JSON Snapshot phục vụ đối chiếu lịch sử)
-  @Column({ type: 'jsonb', nullable: true, default: [] })
+  @Column({ name: 'parts_replaced', type: 'jsonb', nullable: true, default: [] })
   partsReplaced: Array<{
     partId: string;
     partCode: string;

@@ -12,19 +12,8 @@ import { AssetHistory } from '../../history/entities/asset-history.entity';
 import { AssetPartBom } from '../../parts/entities/asset-part-bom.entity';
 import { WorkOrder } from '../../work-orders/entities/work-order.entity';
 
-export enum AssetStatus {
-  OPERATIONAL = 'OPERATIONAL',     // Đang hoạt động bình thường
-  DOWN = 'DOWN',                   // Đang gặp sự cố hỏng hóc, dừng máy
-  MAINTENANCE = 'MAINTENANCE',     // Đang bảo trì định kỳ / bảo dưỡng
-  DECOMMISSIONED = 'DECOMMISSIONED'// Ngừng hoạt động / thanh lý
-}
-
-export enum AssetCriticality {
-  LOW = 'LOW',         // Ít quan trọng
-  MEDIUM = 'MEDIUM',   // Trung bình
-  HIGH = 'HIGH',       // Quan trọng cao
-  CRITICAL = 'CRITICAL'// Cực kỳ quan trọng (dừng là tê liệt dây chuyền)
-}
+import { AssetStatus, AssetCriticality } from './asset.enums';
+export { AssetStatus, AssetCriticality } from './asset.enums';
 
 @Entity('assets')
 export class Asset extends AppBaseEntity {
@@ -60,6 +49,7 @@ export class Asset extends AppBaseEntity {
   @Column({
     type: 'enum',
     enum: AssetStatus,
+    enumName: 'asset_status_enum',
     default: AssetStatus.OPERATIONAL,
   })
   status: AssetStatus;
@@ -67,6 +57,7 @@ export class Asset extends AppBaseEntity {
   @Column({
     type: 'enum',
     enum: AssetCriticality,
+    enumName: 'asset_criticality_enum',
     default: AssetCriticality.MEDIUM,
   })
   criticality: AssetCriticality;
