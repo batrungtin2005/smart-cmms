@@ -6,23 +6,24 @@ import { LocationsModule } from './modules/locations/locations.module';
 import { AssetsModule } from './modules/assets/assets.module';
 import { PartsModule } from './modules/parts/parts.module';
 import { HistoryModule } from './modules/history/history.module';
+import { AuthModule } from './modules/auth/auth.module';
 import { RedisModule } from './common/redis/redis.module';
 
 @Module({
   imports: [
-    // Biến môi trường toàn cục
+    // Global configuration
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['../.env', '.env'],
     }),
 
-    // Module Caching Redis toàn cục
+    // Redis cache module
     RedisModule,
 
-    // Bộ lập lịch tự động (Cron job cho bảo dưỡng định kỳ)
+    // Task scheduler for maintenance cron jobs
     ScheduleModule.forRoot(),
 
-    // Cấu hình kết nối PostgreSQL qua TypeORM
+    // PostgreSQL connection via TypeORM
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -39,15 +40,14 @@ import { RedisModule } from './common/redis/redis.module';
       }),
     }),
 
-    // Module do SV02 phụ trách (Asset, Location, Parts, History)
+    // SV01 Core Module
+    AuthModule,
+
+    // SV02 Modules (Asset, Location, Parts, History)
     LocationsModule,
     AssetsModule,
     PartsModule,
     HistoryModule,
-
-    // TODO: Các thành viên khi code module của mình sẽ import tiếp vào đây:
-    // AuthModule (SV01 - Leader phụ trách)
-    // WorkOrdersModule, SchedulesModule, ReportsModule, SyncModule (SV03 phụ trách)
   ],
 })
 export class AppModule {}
