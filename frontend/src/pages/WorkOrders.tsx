@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  ClipboardList,
   Plus,
   LayoutGrid,
   List as ListIcon,
