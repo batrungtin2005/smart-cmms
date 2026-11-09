@@ -6,6 +6,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { LocationsModule } from './modules/locations/locations.module';
 import { AssetsModule } from './modules/assets/assets.module';
 import { PartsModule } from './modules/parts/parts.module';
+import { PartTransactionModule } from './modules/parts/part-transaction.module';
 import { HistoryModule } from './modules/history/history.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { RedisModule } from './common/redis/redis.module';
@@ -44,10 +45,11 @@ import { RedisModule } from './common/redis/redis.module';
     // SV01 Core Module
     AuthModule,
 
-    // SV02 Modules (Asset, Location, Parts, History)
+    // SV02 Modules (Asset, Location, Parts, History, PartTransaction)
     LocationsModule,
     AssetsModule,
     PartsModule,
+    PartTransactionModule,
     HistoryModule,
   ],
 })
