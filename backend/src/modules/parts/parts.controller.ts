@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
+  Delete,
   Param,
   Body,
   Query,
@@ -9,13 +11,21 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { PartsService } from './parts.service';
 import {
   AdjustStockDto,
   CreateAssetPartBomDto,
   CreatePartDto,
   IssuePartToAssetDto,
+  QueryPartDto,
+  UpdatePartDto,
 } from './dto/create-part.dto';
 
 @ApiTags('Parts & Inventory')
@@ -23,34 +33,86 @@ import {
 export class PartsController {
   constructor(private readonly partsService: PartsService) {}
 
+  // 1. ENDPOINT: LẤY DANH SÁCH PHỤ TÙNG (PHÂN TRANG, TÌM KIẾM, LỌC TỒN KHO)
   @Get()
   @ApiOperation({
     summary: 'Lấy danh sách phụ tùng trong kho',
-    description: 'Có thể lọc các phụ tùng sắp hết hàng (currentStock <= minimumStock).',
+    description:
+      'Hỗ trợ phân trang, tìm kiếm theo từ khóa (Mã PART-xxx, Tên, Kệ kho, Nhà cung cấp), lọc theo danh mục hoặc lọc các phụ tùng sắp hết hàng (currentStock <= minimumStock).',
   })
-  @ApiQuery({ name: 'lowStockOnly', required: false, type: Boolean })
-  findAll(@Query('lowStockOnly') lowStockOnly?: string) {
-    return this.partsService.findAll(lowStockOnly === 'true');
+  @ApiResponse({ status: 200, description: 'Lấy danh sách thành công kèm phân trang.' })
+  findAll(@Query() query: QueryPartDto) {
+    return this.partsService.findAll(query);
   }
 
+  // 2. ENDPOINT: THỐNG KÊ TỔNG QUAN TỒN KHO VÀ GIÁ TRỊ VẬT TƯ
+  @Get('overview')
+  @ApiOperation({
+    summary: 'Lấy thống kê tổng quan kho vật tư',
+    description:
+      'Tổng số loại phụ tùng, tổng số lượng tồn kho (quantity_on_hand), tổng giá trị kho (VNĐ) và số lượng phụ tùng đang dưới ngưỡng an toàn (minimum_stock).',
+  })
+  @ApiResponse({ status: 200, description: 'Thống kê tổng quan kho vật tư.' })
+  getOverview() {
+    return this.partsService.getInventoryOverview();
+  }
+
+  // 3. ENDPOINT: DANH SÁCH CẢNH BÁO TỒN KHO DƯỚI NGƯỠNG AN TOÀN
+  @Get('alerts/low-stock')
+  @ApiOperation({
+    summary: 'Lấy danh sách phụ tùng sắp hết hàng hoặc đã hết hàng',
+    description:
+      'Liệt kê tất cả phụ tùng có currentStock <= minimumStock, phân loại mức độ nghiêm trọng (CRITICAL_OUT_OF_STOCK hoặc WARNING_LOW_STOCK) để lập kế hoạch mua hàng.',
+  })
+  @ApiResponse({ status: 200, description: 'Danh sách cảnh báo tồn kho tối thiểu.' })
+  getLowStockAlerts() {
+    return this.partsService.getLowStockAlerts();
+  }
+
+  // 4. ENDPOINT: XEM CHI TIẾT 1 PHỤ TÙNG
   @Get(':id')
   @ApiOperation({ summary: 'Xem chi tiết phụ tùng kèm định mức gắn trên các máy' })
   @ApiParam({ name: 'id', description: 'UUID của phụ tùng' })
+  @ApiResponse({ status: 200, description: 'Chi tiết phụ tùng.' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy phụ tùng.' })
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.partsService.findOne(id);
   }
 
+  // 5. ENDPOINT: TẠO MÃ PHỤ TÙNG MỚI
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Tạo mã phụ tùng mới trong kho' })
+  @ApiResponse({ status: 201, description: 'Tạo mới thành công.' })
+  @ApiResponse({ status: 409, description: 'Mã phụ tùng đã tồn tại.' })
   create(@Body() dto: CreatePartDto) {
     return this.partsService.create(dto);
   }
 
-  // =====================================================================================
-  // API CỐT LÕI: XUẤT PHỤ TÙNG SỬA CHỮA CHO THIẾT BỊ
-  // Tự động trừ tồn kho (Pessimistic Lock) & tự động tạo 1 bản ghi trong AssetHistory
-  // =====================================================================================
+  // 6. ENDPOINT: CẬP NHẬT THÔNG TIN PHỤ TÙNG
+  @Patch(':id')
+  @ApiOperation({ summary: 'Cập nhật thông tin phụ tùng, đơn giá, vị trí kệ hoặc ngưỡng an toàn' })
+  @ApiParam({ name: 'id', description: 'UUID của phụ tùng' })
+  @ApiResponse({ status: 200, description: 'Cập nhật thành công.' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy phụ tùng.' })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdatePartDto,
+  ) {
+    return this.partsService.update(id, dto);
+  }
+
+  // 7. ENDPOINT: VÔ HIỆU HÓA PHỤ TÙNG (XÓA MỀM)
+  @Delete(':id')
+  @ApiOperation({ summary: 'Vô hiệu hóa phụ tùng (Soft Delete)' })
+  @ApiParam({ name: 'id', description: 'UUID của phụ tùng' })
+  @ApiResponse({ status: 200, description: 'Vô hiệu hóa thành công.' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy phụ tùng.' })
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.partsService.remove(id);
+  }
+
+  // 8. ENDPOINT CỐT LÕI: XUẤT PHỤ TÙNG SỬA CHỮA CHO THIẾT BỊ (GIAO DỊCH ACID)
   @Post('issue-to-asset')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -74,7 +136,7 @@ export class PartsController {
     return this.partsService.issuePartToAsset(dto);
   }
 
-  // Điều chỉnh tồn kho / xuất nhập kho thông thường
+  // 9. ENDPOINT: ĐIỀU CHỈNH TỒN KHO (NHẬP / XUẤT / KIỂM KÊ)
   @Post(':id/adjust')
   @ApiOperation({ summary: 'Điều chỉnh số lượng tồn kho (Nhập/Xuất/Kiểm kê)' })
   @ApiParam({ name: 'id', description: 'UUID của phụ tùng' })
@@ -85,6 +147,7 @@ export class PartsController {
     return this.partsService.adjustStock(id, dto);
   }
 
+  // 10. ENDPOINT: XEM LỊCH SỬ XUẤT NHẬP CỦA PHỤ TÙNG
   @Get(':id/transactions')
   @ApiOperation({ summary: 'Xem lịch sử xuất/nhập của một phụ tùng' })
   @ApiParam({ name: 'id', description: 'UUID của phụ tùng' })
@@ -92,13 +155,14 @@ export class PartsController {
     return this.partsService.getTransactions(id);
   }
 
-  // Quản lý định mức phụ tùng (BOM) theo thiết bị
+  // 11. ENDPOINT: THIẾT LẬP ĐỊNH MỨC PHỤ TÙNG (BOM) CHO MÁY
   @Post('bom')
   @ApiOperation({ summary: 'Thiết lập định mức phụ tùng (BOM) cho thiết bị' })
   createBom(@Body() dto: CreateAssetPartBomDto) {
     return this.partsService.createBom(dto);
   }
 
+  // 12. ENDPOINT: XEM DANH SÁCH ĐỊNH MỨC BOM THEO MÁY
   @Get('bom/asset/:assetId')
   @ApiOperation({ summary: 'Xem danh sách định mức phụ tùng của một thiết bị' })
   @ApiParam({ name: 'assetId', description: 'UUID của thiết bị' })

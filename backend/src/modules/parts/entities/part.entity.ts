@@ -39,7 +39,17 @@ export class Part extends AppBaseEntity {
   unitPrice: number; // Đơn vị tiền tệ VNĐ
 
   @Column({ name: 'current_stock', type: 'int', default: 0 })
-  currentStock: number; // Số lượng tồn kho thực tế
+  currentStock: number; // Số lượng tồn kho thực tế (quantity_on_hand)
+
+  get quantityOnHand(): number {
+    return this.currentStock;
+  }
+
+  get stockStatus(): PartStatus {
+    if (this.currentStock <= 0) return PartStatus.OUT_OF_STOCK;
+    if (this.currentStock <= this.minimumStock) return PartStatus.LOW_STOCK;
+    return PartStatus.IN_STOCK;
+  }
 
   @Column({ name: 'minimum_stock', type: 'int', default: 5 })
   minimumStock: number; // Ngưỡng tồn kho tối thiểu cảnh báo cần nhập
