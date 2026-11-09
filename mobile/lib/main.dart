@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'login_screen.dart';
 
 void main() {
   runApp(const SmartCmmsApp());
@@ -16,8 +17,7 @@ class SmartCmmsApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB)),
         useMaterial3: true,
       ),
-      home: const TechnicianHomePage(),
-    );
+        home: LoginScreen(),     );
   }
 }
 

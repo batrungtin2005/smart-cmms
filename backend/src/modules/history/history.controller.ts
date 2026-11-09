@@ -14,7 +14,7 @@ import { CreateAssetHistoryDto } from './dto/create-history.dto';
 @ApiTags('Asset History')
 @Controller('history')
 export class HistoryController {
-  constructor(private readonly historyService: HistoryService) {}
+  constructor(private readonly historyService: HistoryService) { }
 
   // Lấy báo cáo tổng hợp MTTR, MTBF & Availability toàn bộ thiết bị (hoặc theo xưởng)
   @Get('metrics/overview')
