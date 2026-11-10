@@ -1,73 +1,102 @@
-import React, { useState } from "react";
+import { useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
+import { QrCode, Search, Printer, Plus } from "lucide-react";
+
+interface Asset {
+  id: string;
+  name: string;
+  category: string;
+  status: "OPERATIONAL" | "MAINTENANCE" | "BROKEN";
+  location: string;
+}
 
 export default function Assets() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
-  const [selectedAsset, setSelectedAsset] = useState<any>(null);
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
 
-  // Mock dữ liệu danh sách thiết bị
-  const assetsList = [
+  const assets: Asset[] = [
     {
-      id: "EQ-001",
-      name: "Máy nén khí trục vít #1",
-      location: "Xưởng A",
-      status: "Hoạt động",
-      qr: "QR_CODE_EQ_001",
+      id: "AST-001",
+      name: "Máy nén khí Piston 15HP",
+      category: "Thiết bị áp lực",
+      status: "OPERATIONAL",
+      location: "Xưởng A1",
     },
     {
-      id: "EQ-002",
-      name: "Hệ thống điện lạnh trung tâm",
-      location: "Xưởng B",
-      status: "Bảo trì",
-      qr: "QR_CODE_EQ_002",
+      id: "AST-002",
+      name: "Băng tải cao su 20m",
+      category: "Hệ thống truyền động",
+      status: "MAINTENANCE",
+      location: "Xưởng B2",
     },
     {
-      id: "EQ-003",
-      name: "Cần cẩu trục 5 tấn",
-      location: "Kho tổng",
-      status: "Ngừng hoạt động",
-      qr: "QR_CODE_EQ_003",
+      id: "AST-003",
+      name: "Máy phay CNC 5 trục",
+      category: "Cơ khí chính xác",
+      status: "BROKEN",
+      location: "Xưởng C1",
     },
   ];
 
-  const filteredAssets = assetsList.filter((item) => {
-    const matchId = item.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchStatus = statusFilter === "ALL" || item.status === statusFilter;
-    return matchId && matchStatus;
-  });
+  const filteredAssets = assets.filter(
+    (a) =>
+      a.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      a.id.toLowerCase().includes(searchTerm.toLowerCase()),
+  );
 
   return (
-    <div style={{ padding: "24px", fontFamily: "Arial, sans-serif" }}>
-      <h2>Quản lý Thiết bị & Sinh mã QR</h2>
-
-      {/* Thanh tìm kiếm và bộ lọc */}
-      <div style={{ display: "flex", gap: "16px", margin: "20px 0" }}>
-        <input
-          type="text"
-          placeholder="Tìm kiếm theo mã (VD: EQ-001)..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+    <div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "20px",
+        }}
+      >
+        <h2 style={{ margin: 0, color: "#0f172a" }}>
+          Quản lý Tài sản & Thiết bị
+        </h2>
+        <button
           style={{
-            padding: "8px",
-            width: "300px",
-            borderRadius: "4px",
-            border: "1px solid #ccc",
-          }}
-        />
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          style={{
-            padding: "8px",
-            borderRadius: "4px",
-            border: "1px solid #ccc",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "10px 16px",
+            background: "#0284c7",
+            color: "#fff",
+            border: "none",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontWeight: "bold",
           }}
         >
-          <option value="ALL">Tất cả tình trạng</option>
-          <option value="Hoạt động">Hoạt động</option>
-          <option value="Bảo trì">Bảo trì</option>
-          <option value="Ngừng hoạt động">Ngừng hoạt động</option>
-        </select>
+          <Plus size={18} /> Thêm thiết bị mới
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: "12px", marginBottom: "20px" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            background: "#fff",
+            border: "1px solid #cbd5e1",
+            borderRadius: "6px",
+            padding: "8px 12px",
+            flex: 1,
+          }}
+        >
+          <Search size={18} color="#64748b" />
+          <input
+            type="text"
+            placeholder="Tìm theo tên hoặc mã thiết bị..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ border: "none", outline: "none", width: "100%" }}
+          />
+        </div>
       </div>
 
       <table
@@ -77,37 +106,77 @@ export default function Assets() {
           background: "#fff",
           borderRadius: "8px",
           overflow: "hidden",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
         }}
       >
         <thead>
-          <tr style={{ background: "#f3f4f6", textAlign: "left" }}>
-            <th style={{ padding: "12px" }}>Mã thiết bị</th>
-            <th style={{ padding: "12px" }}>Tên thiết bị</th>
-            <th style={{ padding: "12px" }}>Vị trí</th>
-            <th style={{ padding: "12px" }}>Tình trạng</th>
-            <th style={{ padding: "12px" }}>Thao tác</th>
+          <tr
+            style={{
+              background: "#f8fafc",
+              textAlign: "left",
+              borderBottom: "1px solid #e2e8f0",
+            }}
+          >
+            <th style={{ padding: "12px 16px" }}>Mã tài sản</th>
+            <th style={{ padding: "12px 16px" }}>Tên thiết bị</th>
+            <th style={{ padding: "12px 16px" }}>Phân loại</th>
+            <th style={{ padding: "12px 16px" }}>Vị trí</th>
+            <th style={{ padding: "12px 16px" }}>Trạng thái</th>
+            <th style={{ padding: "12px 16px" }}>Thao tác</th>
           </tr>
         </thead>
         <tbody>
           {filteredAssets.map((item) => (
-            <tr key={item.id} style={{ borderBottom: "1px solid #e5e7eb" }}>
-              <td style={{ padding: "12px" }}>{item.id}</td>
-              <td style={{ padding: "12px" }}>{item.name}</td>
-              <td style={{ padding: "12px" }}>{item.location}</td>
-              <td style={{ padding: "12px" }}>{item.status}</td>
-              <td style={{ padding: "12px" }}>
+            <tr key={item.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
+              <td style={{ padding: "12px 16px", fontWeight: "bold" }}>
+                {item.id}
+              </td>
+              <td style={{ padding: "12px 16px" }}>{item.name}</td>
+              <td style={{ padding: "12px 16px" }}>{item.category}</td>
+              <td style={{ padding: "12px 16px" }}>{item.location}</td>
+              <td style={{ padding: "12px 16px" }}>
+                <span
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    fontSize: "12px",
+                    fontWeight: "bold",
+                    background:
+                      item.status === "OPERATIONAL"
+                        ? "#dcfce7"
+                        : item.status === "MAINTENANCE"
+                          ? "#fef3c7"
+                          : "#fee2e2",
+                    color:
+                      item.status === "OPERATIONAL"
+                        ? "#15803d"
+                        : item.status === "MAINTENANCE"
+                          ? "#b45309"
+                          : "#b91c1c",
+                  }}
+                >
+                  {item.status === "OPERATIONAL"
+                    ? "Hoạt động"
+                    : item.status === "MAINTENANCE"
+                      ? "Bảo trì"
+                      : "Đang hỏng"}
+                </span>
+              </td>
+              <td style={{ padding: "12px 16px" }}>
                 <button
                   onClick={() => setSelectedAsset(item)}
                   style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
                     padding: "6px 12px",
-                    background: "#2563eb",
-                    color: "#fff",
-                    border: "none",
+                    background: "#f1f5f9",
+                    border: "1px solid #cbd5e1",
                     borderRadius: "4px",
                     cursor: "pointer",
                   }}
                 >
-                  Chi tiết & QR
+                  <QrCode size={16} /> Mã QR
                 </button>
               </td>
             </tr>
@@ -115,15 +184,14 @@ export default function Assets() {
         </tbody>
       </table>
 
-      {/* Modal chi tiết & Sinh mã QR in */}
       {selectedAsset && (
         <div
           style={{
             position: "fixed",
             top: 0,
             left: 0,
-            width: "100%",
-            height: "100%",
+            right: 0,
+            bottom: 0,
             background: "rgba(0,0,0,0.5)",
             display: "flex",
             alignItems: "center",
@@ -135,67 +203,57 @@ export default function Assets() {
               background: "#fff",
               padding: "24px",
               borderRadius: "8px",
-              width: "400px",
+              width: "320px",
               textAlign: "center",
             }}
           >
-            <h3>Chi tiết thiết bị: {selectedAsset.id}</h3>
-            <p>
-              <strong>Tên:</strong> {selectedAsset.name}
-            </p>
-            <p>
-              <strong>Vị trí:</strong> {selectedAsset.location}
-            </p>
-            <p>
-              <strong>Tình trạng:</strong> {selectedAsset.status}
-            </p>
-
+            <h3 style={{ marginTop: 0 }}>Tem Mã QR Thiết bị</h3>
             <div
               style={{
                 margin: "20px 0",
-                padding: "15px",
-                background: "#f9fafb",
-                border: "1px dashed #000",
-                display: "inline-block",
+                display: "flex",
+                justifyContent: "center",
               }}
             >
-              <div
+              <QRCodeSVG
+                value={JSON.stringify({
+                  id: selectedAsset.id,
+                  name: selectedAsset.name,
+                })}
+                size={160}
+              />
+            </div>
+            <p style={{ margin: "4px 0", fontWeight: "bold" }}>
+              {selectedAsset.name}
+            </p>
+            <p style={{ margin: "4px 0", color: "#64748b", fontSize: "14px" }}>
+              Mã: {selectedAsset.id}
+            </p>
+            <div style={{ display: "flex", gap: "8px", marginTop: "20px" }}>
+              <button
+                onClick={() => window.print()}
                 style={{
-                  width: "120px",
-                  height: "120px",
-                  background: "#000",
-                  color: "#fff",
+                  flex: 1,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  margin: "0 auto",
-                  fontSize: "12px",
-                }}
-              >
-                [QR: {selectedAsset.qr}]
-              </div>
-            </div>
-            <div>
-              <button
-                onClick={() => alert("Đang kết nối máy in để in mã QR...")}
-                style={{
-                  padding: "8px 16px",
-                  background: "#16a34a",
+                  gap: "6px",
+                  padding: "8px",
+                  background: "#0284c7",
                   color: "#fff",
                   border: "none",
                   borderRadius: "4px",
                   cursor: "pointer",
-                  marginRight: "10px",
                 }}
               >
-                In mã QR
+                <Printer size={16} /> In Tem
               </button>
               <button
                 onClick={() => setSelectedAsset(null)}
                 style={{
-                  padding: "8px 16px",
-                  background: "#dc2626",
-                  color: "#fff",
+                  flex: 1,
+                  padding: "8px",
+                  background: "#e2e8f0",
                   border: "none",
                   borderRadius: "4px",
                   cursor: "pointer",

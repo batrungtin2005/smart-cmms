@@ -184,4 +184,73 @@ export class HistoryService {
       })),
     };
   }
+
+  // ================= TÍNH TOÁN MTTR & MTBF TOÀN BỘ 300+ THIẾT BỊ =================
+  async calculateAllAssetsReliability(locationId?: string) {
+    const queryBuilder = this.assetRepo
+      .createQueryBuilder('asset')
+      .leftJoinAndSelect('asset.location', 'location')
+      .leftJoinAndSelect(
+        'asset.historyLogs',
+        'history',
+        'history.isFailureCounted = :isFailure',
+        { isFailure: true },
+      )
+      .where('asset.isActive = :isActive', { isActive: true });
+
+    if (locationId) {
+      queryBuilder.andWhere('asset.locationId = :locationId', { locationId });
+    }
+
+    const assets = await queryBuilder.orderBy('asset.assetCode', 'ASC').getMany();
+
+    return assets.map((asset) => {
+      const failures = asset.historyLogs || [];
+      const failureCount = failures.length;
+      const opHours = Number(asset.operatingHours || 0);
+
+      const totalRepairTime = failures.reduce(
+        (sum, item) => sum + Number(item.actualRepairTimeHours || 0),
+        0,
+      );
+
+      const totalDowntime = failures.reduce(
+        (sum, item) => sum + Number(item.downtimeHours || 0),
+        0,
+      );
+
+      const mttr = failureCount > 0 ? Number((totalRepairTime / failureCount).toFixed(2)) : 0;
+      const mtbf = failureCount > 0 ? Number((opHours / failureCount).toFixed(2)) : opHours;
+
+      let availability = 100.0;
+      if (failureCount > 0 && mtbf + mttr > 0) {
+        availability = Number(((mtbf / (mtbf + mttr)) * 100).toFixed(2));
+      }
+
+      const lastFailureLog = failures.sort(
+        (a, b) =>
+          new Date(b.breakdownTime || b.createdAt).getTime() -
+          new Date(a.breakdownTime || a.createdAt).getTime(),
+      )[0];
+
+      return {
+        assetId: asset.id,
+        assetCode: asset.assetCode,
+        assetName: asset.name,
+        category: asset.category,
+        locationName: asset.location ? asset.location.name : null,
+        status: asset.status,
+        operatingHours: opHours,
+        totalFailures: failureCount,
+        totalRepairTimeHours: Number(totalRepairTime.toFixed(2)),
+        totalDowntimeHours: Number(totalDowntime.toFixed(2)),
+        mttrHours: mttr,
+        mtbfHours: mtbf,
+        availabilityPercentage: availability,
+        lastFailureDate: lastFailureLog
+          ? lastFailureLog.breakdownTime || lastFailureLog.createdAt
+          : null,
+      };
+    });
+  }
 }

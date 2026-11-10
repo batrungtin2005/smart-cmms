@@ -1,0 +1,2145 @@
+{
+  "info": {
+    "_postman_id": "164a59a5-e103-533e-9715-ce4d96b3e03b",
+    "name": "Smart CMMS API - SV06 QA",
+    "description": "Bộ kiểm thử API tự động cho Smart CMMS (DT05) - SV06 QA & DevOps.\n\nChuẩn bị: docker compose up -d, chạy backend, nạp devops/postman/seed-test-users.sql.\nChạy: xem devops/postman/README.md.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{adminToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Kiểm tra chung: phản hồi JSON theo chuẩn { success, statusCode, timestamp }",
+          "const ct = pm.response.headers.get('Content-Type') || '';",
+          "if (ct.includes('application/json')) {",
+          "  pm.test('[chung] Đúng định dạng phản hồi chuẩn', () => {",
+          "    const b = pm.response.json();",
+          "    pm.expect(b).to.have.property('success', pm.response.code < 400);",
+          "    pm.expect(b).to.have.property('statusCode', pm.response.code);",
+          "    pm.expect(b).to.have.property('timestamp');",
+          "  });",
+          "}",
+          "pm.test('[chung] Thời gian phản hồi < 2000ms', () => pm.expect(pm.response.responseTime).to.be.below(2000));"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "runId",
+      "value": ""
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "techToken",
+      "value": ""
+    },
+    {
+      "key": "badToken",
+      "value": ""
+    },
+    {
+      "key": "technicianRoleId",
+      "value": ""
+    },
+    {
+      "key": "locationId",
+      "value": ""
+    },
+    {
+      "key": "childLocationId",
+      "value": ""
+    },
+    {
+      "key": "assetId",
+      "value": ""
+    },
+    {
+      "key": "assetCode",
+      "value": ""
+    },
+    {
+      "key": "partId",
+      "value": ""
+    },
+    {
+      "key": "importTxId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "00. Auth & Users (SV01)",
+      "description": "Đăng nhập JWT, thông tin cá nhân, phân quyền RBAC. Chạy đầu tiên: lưu adminToken / techToken.",
+      "item": [
+        {
+          "name": "Đăng nhập ADMIN thành công",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Mã chạy riêng cho mỗi lần chạy để không trùng mã (API xóa mềm nên mã cũ vẫn bị giữ)",
+                  "pm.collectionVariables.set('runId', String(Date.now()).slice(-7));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('Trả về accessToken kiểu Bearer', () => { pm.expect(d.accessToken).to.be.a('string').and.not.empty; pm.expect(d.tokenType).to.eql('Bearer'); });",
+                  "pm.test('Không lộ passwordHash', () => pm.expect(d.user).to.not.have.property('passwordHash'));",
+                  "pm.collectionVariables.set('adminToken', d.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Đăng nhập sai mật khẩu → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"sai_mat_khau\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+                  "pm.test('success = false', () => pm.expect(pm.response.json().success).to.be.false);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Đăng nhập thiếu mật khẩu → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUsername}}\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Đăng nhập KTV (TECHNICIAN)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{techUsername}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('techToken', pm.response.json().data.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Xem thông tin cá nhân /me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Đúng tài khoản đang đăng nhập', () => pm.expect(pm.response.json().data.username).to.eql(pm.variables.get('adminUsername')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gọi /me không có token → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/auth/me",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gọi /me với token sai → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/auth/me",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{badToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('badToken', 'eyJhbGciOiJIUzI1NiJ9.e30.sai-chu-ky');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Danh sách vai trò",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/auth/roles"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const roles = pm.response.json().data;",
+                  "pm.test('Có đủ 3 vai trò', () => pm.expect(roles.map(r => r.name)).to.include.members(['ADMIN', 'MAINTENANCE_MANAGER', 'TECHNICIAN']));",
+                  "pm.collectionVariables.set('technicianRoleId', roles.find(r => r.name === 'TECHNICIAN').id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Danh sách người dùng (ADMIN)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/auth/users"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Trả về mảng', () => pm.expect(pm.response.json().data).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tạo tài khoản KTV mới (ADMIN)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/users",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"qa_new_{{runId}}\",\n  \"email\": \"qa_new_{{runId}}@smartcmms.test\",\n  \"password\": \"{{testPassword}}\",\n  \"fullName\": \"KTV tạo bởi Postman\",\n  \"roleId\": \"{{technicianRoleId}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// roleId phải là số: thay chuỗi '\"{{technicianRoleId}}\"' bằng số",
+                  "const body = pm.request.body.raw.replace('\"{{technicianRoleId}}\"', pm.collectionVariables.get('technicianRoleId'));",
+                  "pm.request.body.update(body);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Không lộ passwordHash', () => pm.expect(pm.response.json().data).to.not.have.property('passwordHash'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tạo tài khoản trùng username → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/users",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"qa_new_{{runId}}\",\n  \"email\": \"khac_{{runId}}@smartcmms.test\",\n  \"password\": \"{{testPassword}}\",\n  \"fullName\": \"Trùng\",\n  \"roleId\": 3\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "KTV tạo tài khoản → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/users",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"hacker_{{runId}}\",\n  \"email\": \"hacker_{{runId}}@smartcmms.test\",\n  \"password\": \"{{testPassword}}\",\n  \"fullName\": \"Không có quyền\",\n  \"roleId\": 1\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{techToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "KTV xem danh sách người dùng → 403",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/auth/users",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{techToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01. Locations (SV02)",
+      "description": "Cây vị trí nhà xưởng / khu vực / dây chuyền.",
+      "item": [
+        {
+          "name": "Tạo vị trí cấp cao nhất",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/locations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"LOC-QA-{{runId}}\",\n  \"name\": \"Nhà xưởng QA {{runId}}\",\n  \"description\": \"Tạo bởi Postman SV06\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('Có id UUID', () => pm.expect(d.id).to.match(/^[0-9a-f-]{36}$/));",
+                  "pm.collectionVariables.set('locationId', d.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tạo vị trí con (parentId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/locations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"LOC-QA-{{runId}}-L1\",\n  \"name\": \"Dây chuyền QA {{runId}}\",\n  \"parentId\": \"{{locationId}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('parentId đúng vị trí cha', () => pm.expect(d.parentId).to.eql(pm.collectionVariables.get('locationId')));",
+                  "pm.collectionVariables.set('childLocationId', d.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tạo vị trí trùng mã → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/locations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"LOC-QA-{{runId}}\",\n  \"name\": \"Trùng mã\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tạo vị trí với parentId sai định dạng → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/locations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"LOC-QA-{{runId}}-BAD\",\n  \"name\": \"Sai parent\",\n  \"parentId\": \"khong-phai-uuid\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cây vị trí",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/locations/tree"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Danh sách vị trí",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/locations"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Có vị trí vừa tạo', () => pm.expect(JSON.stringify(pm.response.json().data)).to.include(pm.collectionVariables.get('locationId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chi tiết vị trí",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/locations/{{locationId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cập nhật vị trí",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/locations/{{locationId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Đã cập nhật bởi Postman\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Mô tả đã đổi', () => pm.expect(pm.response.json().data.description).to.eql('Đã cập nhật bởi Postman'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Vị trí không tồn tại → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/locations/00000000-0000-4000-8000-000000000000"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02. Assets & QR (SV02)",
+      "description": "CRUD thiết bị, tìm kiếm, phân trang, trạng thái, mã QR.",
+      "item": [
+        {
+          "name": "Tạo thiết bị",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/assets",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assetCode\": \"AST-QA-{{runId}}\",\n  \"name\": \"Máy nén khí QA {{runId}}\",\n  \"category\": \"Khí nén\",\n  \"manufacturer\": \"Atlas Copco\",\n  \"model\": \"GA-37\",\n  \"serialNumber\": \"SN-{{runId}}\",\n  \"locationId\": \"{{childLocationId}}\",\n  \"criticality\": \"HIGH\",\n  \"operatingHours\": 1200,\n  \"specifications\": {\n    \"power_kw\": 37,\n    \"pressure_bar\": 8\n  }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('Mặc định OPERATIONAL', () => pm.expect(d.status).to.eql('OPERATIONAL'));",
+                  "pm.test('Có qrCodeUrl', () => pm.expect(d.qrCodeUrl).to.include(d.assetCode));",
+                  "pm.collectionVariables.set('assetId', d.id);",
+                  "pm.collectionVariables.set('assetCode', d.assetCode);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tạo thiết bị thiếu tên & danh mục → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/assets",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assetCode\": \"AST-QA-{{runId}}-X\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Có thông báo lỗi tiếng Việt', () => pm.expect(pm.response.json().message).to.include('không được để trống'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tạo thiết bị trùng mã → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/assets",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assetCode\": \"AST-QA-{{runId}}\",\n  \"name\": \"Trùng\",\n  \"category\": \"Khí nén\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tạo thiết bị với trạng thái sai → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/assets",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assetCode\": \"AST-QA-{{runId}}-Y\",\n  \"name\": \"Sai trạng thái\",\n  \"category\": \"Khí nén\",\n  \"status\": \"BROKEN\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Danh sách có phân trang",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/assets?page=1&limit=5"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json().data;",
+                  "pm.test('Đúng meta phân trang', () => { pm.expect(r.meta.page).to.eql(1); pm.expect(r.meta.limit).to.eql(5); });",
+                  "pm.test('Không vượt quá limit', () => pm.expect(r.data.length).to.be.at.most(5));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tìm kiếm theo mã AST",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/assets?search={{assetCode}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Tìm thấy thiết bị vừa tạo', () => pm.expect(pm.response.json().data.data.map(a => a.assetCode)).to.include(pm.collectionVariables.get('assetCode')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lọc theo trạng thái OPERATIONAL",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/assets?status=OPERATIONAL&limit=50"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Mọi kết quả đều OPERATIONAL', () => pm.response.json().data.data.forEach(a => pm.expect(a.status).to.eql('OPERATIONAL')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Phân trang với limit=0 → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/assets?limit=0"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tổng quan thiết bị",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/assets/overview"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Có statusBreakdown', () => pm.expect(pm.response.json().data.statusBreakdown).to.have.all.keys('OPERATIONAL', 'DOWN', 'MAINTENANCE', 'DECOMMISSIONED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chi tiết thiết bị theo ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/assets/{{assetId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Thiết bị không tồn tại → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/assets/00000000-0000-4000-8000-000000000000"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ID sai định dạng UUID → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/assets/abc"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tra cứu theo mã AST",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/assets/code/{{assetCode}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Đúng thiết bị', () => pm.expect(pm.response.json().data.id).to.eql(pm.collectionVariables.get('assetId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lấy mã QR (data URL)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/assets/{{assetId}}/qr-code"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('qrDataUrl là ảnh PNG base64', () => pm.expect(pm.response.json().data.qrDataUrl).to.match(/^data:image\\/png;base64,/));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tải ảnh QR (PNG)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/assets/{{assetId}}/qr-image"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Content-Type image/png', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('image/png'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lấy mã QR theo mã AST",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/assets/code/{{assetCode}}/qr-code"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Quét QR (mobile)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/assets/scan-qr?code={{assetCode}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Trả đúng thiết bị', () => pm.expect(pm.response.json().data.asset.assetCode).to.eql(pm.collectionVariables.get('assetCode')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Kiểm tra nhanh theo mã",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/assets/inspect/{{assetCode}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cập nhật thông tin thiết bị",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/assets/{{assetId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"manufacturer\": \"Atlas Copco Việt Nam\",\n  \"operatingHours\": 1500\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Nhà sản xuất đã đổi', () => pm.expect(pm.response.json().data.manufacturer).to.eql('Atlas Copco Việt Nam'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chuyển trạng thái sang MAINTENANCE",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/assets/{{assetId}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"MAINTENANCE\",\n  \"reason\": \"Bảo dưỡng định kỳ 1500 giờ (Postman)\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Trạng thái MAINTENANCE', () => pm.expect(pm.response.json().data.status).to.eql('MAINTENANCE'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chuyển trạng thái không hợp lệ → 400",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/assets/{{assetId}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"BROKEN\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Thiết bị thuộc vị trí",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/locations/{{childLocationId}}/assets"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Có thiết bị vừa tạo', () => pm.expect(JSON.stringify(pm.response.json().data)).to.include(pm.collectionVariables.get('assetId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lịch sử của thiết bị",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/assets/{{assetId}}/history"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03. Parts & Inventory (SV02)",
+      "description": "Phụ tùng, cảnh báo tồn kho, nhập/xuất kho, BOM. Kiểm tra quy tắc KHÔNG cho tồn kho âm.",
+      "item": [
+        {
+          "name": "Tạo phụ tùng (tồn 3 < tối thiểu 5)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/parts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partCode\": \"PRT-QA-{{runId}}\",\n  \"name\": \"Vòng bi SKF 6205 QA\",\n  \"category\": \"Vòng bi\",\n  \"unit\": \"Cái\",\n  \"unitPrice\": 100000,\n  \"currentStock\": 3,\n  \"minimumStock\": 5,\n  \"shelfLocation\": \"Kệ A1\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('Tồn kho ban đầu = 3', () => pm.expect(Number(d.currentStock)).to.eql(3));",
+                  "pm.collectionVariables.set('partId', d.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tạo phụ tùng trùng mã → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/parts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partCode\": \"PRT-QA-{{runId}}\",\n  \"name\": \"Trùng\",\n  \"category\": \"Vòng bi\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tạo phụ tùng tồn kho âm → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/parts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partCode\": \"PRT-QA-{{runId}}-NEG\",\n  \"name\": \"Âm\",\n  \"category\": \"Vòng bi\",\n  \"currentStock\": -1\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Danh sách phụ tùng",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/parts?search=PRT-QA-{{runId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Có phụ tùng vừa tạo', () => pm.expect(JSON.stringify(pm.response.json().data)).to.include(pm.collectionVariables.get('partId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chi tiết phụ tùng",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/parts/{{partId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cập nhật phụ tùng",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/parts/{{partId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shelfLocation\": \"Kệ B2\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Kệ đã đổi', () => pm.expect(pm.response.json().data.shelfLocation).to.eql('Kệ B2'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cảnh báo sắp hết hàng",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/parts/alerts/low-stock"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Phụ tùng tồn 3 < 5 nằm trong cảnh báo', () => pm.expect(pm.response.json().data.alerts.map(a => a.partId)).to.include(pm.collectionVariables.get('partId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tổng quan kho",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/parts/overview"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Có lowStockCount', () => pm.expect(pm.response.json().data.overview).to.have.property('lowStockCount'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Nhập kho 10 → tồn 13",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/part-transactions/import",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partId\": \"{{partId}}\",\n  \"quantity\": 10,\n  \"unitPrice\": 120000,\n  \"referenceCode\": \"PNK-QA-{{runId}}\",\n  \"supplierInfo\": \"Công ty Vòng Bi SKF Việt Nam\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const t = pm.response.json().data.transaction;",
+                  "pm.test('IMPORT 3 → 13', () => { pm.expect(t.transactionType).to.eql('IMPORT'); pm.expect(t.stockBefore).to.eql(3); pm.expect(t.stockAfter).to.eql(13); });",
+                  "pm.collectionVariables.set('importTxId', t.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Xuất kho 4 cho thiết bị → tồn 9",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/part-transactions/export",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partId\": \"{{partId}}\",\n  \"quantity\": 4,\n  \"assetId\": \"{{assetId}}\",\n  \"referenceCode\": \"PXK-QA-{{runId}}\",\n  \"reason\": \"Thay vòng bi cụm motor (Postman)\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const t = pm.response.json().data.transaction;",
+                  "pm.test('EXPORT 13 → 9', () => { pm.expect(t.stockBefore).to.eql(13); pm.expect(t.stockAfter).to.eql(9); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Xuất vượt tồn kho → 400 (chặn tồn âm)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/part-transactions/export",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partId\": \"{{partId}}\",\n  \"quantity\": 999\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Thông báo không đủ tồn kho', () => pm.expect(pm.response.json().message).to.include('Không đủ tồn kho'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tồn kho không đổi sau lần xuất bị từ chối",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/parts/{{partId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Tồn kho vẫn = 9', () => pm.expect(Number(pm.response.json().data.currentStock)).to.eql(9));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Xuất số lượng 0 → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/part-transactions/export",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partId\": \"{{partId}}\",\n  \"quantity\": 0\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lịch sử giao dịch theo phụ tùng",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/part-transactions?partId={{partId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json().data;",
+                  "pm.test('Có 2 giao dịch (IMPORT, EXPORT)', () => pm.expect(r.data.map(t => t.transactionType)).to.include.members(['IMPORT', 'EXPORT']));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chi tiết giao dịch",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/part-transactions/{{importTxId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Điều chỉnh kiểm kê: đặt tồn = 9",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/parts/{{partId}}/adjust",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionType\": \"ADJUSTMENT\",\n  \"quantity\": 9,\n  \"notes\": \"Kiểm kê cuối ca (Postman)\"\n}"
+            },
+            "description": "Lưu ý: ADJUSTMENT đặt lại tồn kho BẰNG quantity (không cộng/trừ)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "pm.test('stockAfter = 9', () => pm.expect(pm.response.json().data.stockAfter).to.eql(9));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Giao dịch của phụ tùng",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/parts/{{partId}}/transactions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Có ít nhất 3 giao dịch', () => pm.expect(pm.response.json().data.length).to.be.at.least(3));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gắn phụ tùng vào BOM thiết bị",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/parts/bom",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assetId\": \"{{assetId}}\",\n  \"partId\": \"{{partId}}\",\n  \"standardQuantity\": 2,\n  \"replacementIntervalHours\": 2000,\n  \"isCritical\": true,\n  \"installationPosition\": \"Cụm motor chính\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BOM theo thiết bị",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/parts/bom/asset/{{assetId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('BOM có phụ tùng vừa gắn', () => pm.expect(pm.response.json().data.map(b => b.partId)).to.include(pm.collectionVariables.get('partId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Xuất phụ tùng cho thiết bị + ghi lịch sử → tồn 8",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/parts/issue-to-asset",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partId\": \"{{partId}}\",\n  \"assetId\": \"{{assetId}}\",\n  \"quantity\": 1,\n  \"eventType\": \"PART_REPLACEMENT\",\n  \"reason\": \"Thay vòng bi do quá nhiệt (Postman)\",\n  \"actualRepairTimeHours\": 1.5,\n  \"downtimeHours\": 2,\n  \"laborCost\": 150000\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('stockAfter = 8', () => pm.expect(pm.response.json().data.partIssued.stockAfter).to.eql(8));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04. History & KPI MTTR/MTBF (SV02)",
+      "description": "Ghi nhật ký sự cố/bảo trì và tính MTTR, MTBF.",
+      "item": [
+        {
+          "name": "Ghi sự cố hỏng máy (tính MTTR/MTBF)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/history",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assetId\": \"{{assetId}}\",\n  \"eventType\": \"BREAKDOWN\",\n  \"title\": \"Máy nén dừng đột ngột (Postman)\",\n  \"actualRepairTimeHours\": 3,\n  \"downtimeHours\": 4,\n  \"operatingHoursAtFailure\": 1500,\n  \"isFailureCounted\": true,\n  \"failureCause\": \"Quá nhiệt\",\n  \"actionTaken\": \"Thay vòng bi, vệ sinh két làm mát\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ghi lịch sử với loại sự kiện sai → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/history",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assetId\": \"{{assetId}}\",\n  \"eventType\": \"EXPLOSION\",\n  \"title\": \"Sai loại\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lịch sử theo thiết bị",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/history/asset/{{assetId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Có ít nhất 2 sự kiện (thay phụ tùng + hỏng)', () => pm.expect(pm.response.json().data.length).to.be.at.least(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chỉ số MTTR/MTBF của thiết bị",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/history/asset/{{assetId}}/metrics"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const m = pm.response.json().data;",
+                  "pm.test('Đếm 1 lần hỏng', () => pm.expect(m.totalFailures).to.eql(1));",
+                  "pm.test('MTTR = 3 giờ', () => pm.expect(Number(m.mttrHours)).to.eql(3));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tổng quan chỉ số toàn hệ thống",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/history/metrics/overview"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05. Security - API SV02 phải yêu cầu đăng nhập",
+      "description": "Theo SRS, mọi API nghiệp vụ phải có JwtAuthGuard. Các request dưới đây gọi KHÔNG có token và mong đợi 401.\nHiện tại (09/11/2026) các controller SV02 chưa gắn guard nên folder này FAIL — đây là lỗi cần SV02 sửa.\nRequest được thiết kế không làm thay đổi dữ liệu (dùng ID không tồn tại / body sai).",
+      "item": [
+        {
+          "name": "Danh sách thiết bị không token → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/assets",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Xóa thiết bị không token → 401",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/assets/00000000-0000-4000-8000-000000000000",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tạo phụ tùng không token → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/parts",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Xuất kho không token → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/part-transactions/export",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ghi lịch sử không token → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/history",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Xóa vị trí không token → 401",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/locations/00000000-0000-4000-8000-000000000000",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06. Work Orders, Schedules, Sync (SV03) - CHỜ API",
+      "description": "SV03 chưa có controller Work Order / Maintenance Schedule / Report / Sync trên develop (09/11/2026).\nBổ sung request khi API được merge.",
+      "item": []
+    },
+    {
+      "name": "99. Cleanup",
+      "description": "Vô hiệu hóa (xóa mềm) dữ liệu vừa tạo.",
+      "item": [
+        {
+          "name": "Xóa thiết bị",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/assets/{{assetId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Thiết bị đã xóa không còn truy cập được → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/assets/{{assetId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Xóa phụ tùng",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/parts/{{partId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Xóa vị trí con",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/locations/{{childLocationId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Xóa vị trí cha",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/locations/{{locationId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
