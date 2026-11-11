@@ -34,7 +34,7 @@ export class CreateUserDto {
   @IsString()
   phoneNumber?: string;
 
-  @ApiProperty({ example: 3, description: 'Role ID: 1=ADMIN, 2=MANAGER, 3=TECHNICIAN' })
+  @ApiProperty({ example: 3, description: 'Role ID from GET /auth/roles (ADMIN, MAINTENANCE_MANAGER, TECHNICIAN, WAREHOUSE_KEEPER); IDs depend on database data' })
   @IsInt()
   @IsNotEmpty()
   roleId: number;

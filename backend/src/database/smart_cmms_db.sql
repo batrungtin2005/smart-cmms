@@ -139,7 +139,7 @@ CREATE TABLE IF NOT EXISTS roles (
 -- Dữ liệu mặc định (4 vai trò)
 INSERT INTO roles (name, description) VALUES
     ('ADMIN',            'Quản trị viên hệ thống — toàn quyền')
-  , ('MANAGER',          'Quản lý xưởng — tạo/duyệt Work Order, xem báo cáo')
+  , ('MAINTENANCE_MANAGER',          'Quản lý xưởng — tạo/duyệt Work Order, xem báo cáo')
   , ('TECHNICIAN',       'Kỹ thuật viên — nhận và thực hiện phiếu công việc')
   , ('WAREHOUSE_KEEPER', 'Thủ kho — quản lý nhập xuất phụ tùng, kiểm soát tồn kho')
 ON CONFLICT (name) DO NOTHING;
