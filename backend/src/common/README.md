@@ -8,9 +8,9 @@ Xây dựng nền tảng dùng chung cho toàn bộ Backend để các bạn SV0
 - `base.entity.ts`: Lớp thực thể cơ sở chứa `id` (UUID), `created_at`, `updated_at`.
 - `guards/`:
   - `jwt-auth.guard.ts`: Bảo vệ các API yêu cầu đăng nhập.
-  - `roles.guard.ts`: Kiểm tra vai trò người dùng (ADMIN, MANAGER, TECHNICIAN, WAREHOUSE_KEEPER).
+  - `roles.guard.ts`: Kiểm tra vai trò người dùng (ADMIN, MAINTENANCE_MANAGER, TECHNICIAN, WAREHOUSE_KEEPER).
 - `decorators/`:
-  - `roles.decorator.ts`: Decorator `@Roles('ADMIN', 'MANAGER')`.
+  - `roles.decorator.ts`: Decorator `@Roles('ADMIN', 'MAINTENANCE_MANAGER')`.
   - `current-user.decorator.ts`: Lấy thông tin user hiện tại từ Request (`@CurrentUser()`).
 - `filters/`:
   - `http-exception.filter.ts`: Chuẩn hóa định dạng lỗi toàn hệ thống về dạng chuẩn JSON.
@@ -19,4 +19,6 @@ Xây dựng nền tảng dùng chung cho toàn bộ Backend để các bạn SV0
 
 ## Đồng bộ ngày 07/11/2026
 
-Tên vai trò quản lý trong ví dụ được đổi thành MANAGER để khớp seed SQL và AuthController. Không thay đổi thuật toán RolesGuard.
+Tên vai trò quản lý trong ví dụ được đổi thành MAINTENANCE_MANAGER để khớp seed SQL và AuthController. Không thay đổi thuật toán RolesGuard.
+
+Ngày 11/11/2026: cập nhật ví dụ theo quyết định dùng `MAINTENANCE_MANAGER`; guard vẫn so sánh chính xác tên vai trò, không thêm alias cho tên cũ.

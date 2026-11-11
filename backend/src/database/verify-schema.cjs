@@ -81,8 +81,8 @@ async function main() {
     const assetId = randomUUID();
     const woId = randomUUID();
     const partId = randomUUID();
-    await client.query("INSERT INTO users (id, role_id, username, full_name, email, password_hash, avatar_url) SELECT $1, id, 'schema_test', 'Schema Test', 'schema@test.invalid', 'test-only', '/avatar.png' FROM roles WHERE name = 'MANAGER'", [userId]);
-    await client.query("UPDATE roles SET description = 'test update without updated_at trigger' WHERE name = 'MANAGER'");
+    await client.query("INSERT INTO users (id, role_id, username, full_name, email, password_hash, avatar_url) SELECT $1, id, 'schema_test', 'Schema Test', 'schema@test.invalid', 'test-only', '/avatar.png' FROM roles WHERE name = 'MAINTENANCE_MANAGER'", [userId]);
+    await client.query("UPDATE roles SET description = 'test update without updated_at trigger' WHERE name = 'MAINTENANCE_MANAGER'");
     await client.query("INSERT INTO assets (id, asset_code, name, category) VALUES ($1, 'TEST-ASSET', 'Test', 'Test')", [assetId]);
     await client.query("INSERT INTO work_orders (id, work_order_code, title, asset_id, created_by_id, assigned_technician_id, breakdown_time, start_time) VALUES ($1, 'TEST-WO', 'Test repair', $2, $3, $3, '2026-11-07 08:00:00+07', '2026-11-07 10:00:00+07')", [woId, assetId, userId]);
     assert.equal(Number((await client.query('SELECT downtime_hours FROM work_orders WHERE id = $1', [woId])).rows[0].downtime_hours), 0);
@@ -103,7 +103,7 @@ async function main() {
     await client.query('DELETE FROM work_orders WHERE id = $1', [woId]);
     assert.equal((await client.query('SELECT work_order_id FROM part_transactions')).rows[0].work_order_id, null);
     assert.equal(Number((await client.query('SELECT COUNT(*) FROM work_order_parts')).rows[0].count), 0);
-    console.log('PASS: MANAGER/user insert, role update, downtime calculation/timezones/invalid dates, subtotal, WorkOrder foreign keys and deletion behavior.');
+    console.log('PASS: MAINTENANCE_MANAGER/user insert, role update, downtime calculation/timezones/invalid dates, subtotal, WorkOrder foreign keys and deletion behavior.');
   } finally {
     await client.query('ROLLBACK');
     await client.end();

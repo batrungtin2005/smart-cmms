@@ -21,7 +21,7 @@ psql -d smart_cmms_db -f smart_cmms_db.sql
 
 | # | Bảng | Nhóm | Tác dụng |
 |---|------|------|----------|
-| 1 | `roles` | Auth | 4 vai trò: ADMIN, MANAGER, TECHNICIAN, WAREHOUSE_KEEPER |
+| 1 | `roles` | Auth | 4 vai trò: ADMIN, MAINTENANCE_MANAGER, TECHNICIAN, WAREHOUSE_KEEPER |
 | 2 | `users` | Auth | Tài khoản đăng nhập, JWT, bcrypt |
 | 3 | `locations` | Asset | Cây vị trí nhà xưởng đệ quy (Nhà máy → Phân xưởng → Khu vực) |
 | 4 | `assets` | Asset | 300+ thiết bị, cache MTTR/MTBF, QR code cho Mobile |
@@ -78,7 +78,7 @@ Thư mục `seeds/` chứa các script sinh dữ liệu lớn phục vụ kiểm
 - Giữ `avatar_url VARCHAR(500) NULL` và bổ sung vào User entity; bỏ `last_login_at`.
 - Bỏ `users.status` và `user_status_enum`; trạng thái tài khoản hiện chỉ gồm bật/tắt, không còn trạng thái SUSPENDED riêng.
 - Role bỏ `permissions`, `updated_at`; loại roles khỏi danh sách trigger. Các mốc thời gian Auth dùng TIMESTAMPTZ.
-- Tên vai trò quản lý thống nhất `MANAGER` trong seed SQL và AuthController.
+- Tên vai trò quản lý thống nhất `MAINTENANCE_MANAGER` trong seed SQL và AuthController.
 
 ### Work Order
 
@@ -104,8 +104,14 @@ npm run build:backend
 node backend/src/database/verify-schema.cjs
 ```
 
-Script đọc cấu hình DB giống AppModule, không in mật khẩu, không khởi động ứng dụng hoặc chạy TypeORM synchronize. Script tạo schema có tên ngẫu nhiên trong một transaction, nạp SQL vào schema đó, so sánh tên cột/kiểu/nullable/enum/độ dài/precision với toàn bộ entity đã build. Sau đó kiểm tra tạo User có role MANAGER, cập nhật Role không cần updated_at, downtime theo múi giờ, từ chối thời gian âm, subtotal và khóa ngoại giao dịch kho. Khối finally rollback toàn bộ schema và dữ liệu test; không tạo bảng ứng dụng trong public.
+Script đọc cấu hình DB giống AppModule, không in mật khẩu, không khởi động ứng dụng hoặc chạy TypeORM synchronize. Script tạo schema có tên ngẫu nhiên trong một transaction, nạp SQL vào schema đó, so sánh tên cột/kiểu/nullable/enum/độ dài/precision với toàn bộ entity đã build. Sau đó kiểm tra tạo User có role MAINTENANCE_MANAGER, cập nhật Role không cần updated_at, downtime theo múi giờ, từ chối thời gian âm, subtotal và khóa ngoại giao dịch kho. Khối finally rollback toàn bộ schema và dữ liệu test; không tạo bảng ứng dụng trong public.
 
 File SQL dùng để khởi tạo mới. `CREATE TABLE IF NOT EXISTS` không đổi cột của bảng cũ; các ADD CONSTRAINT cuối file chưa có cơ chế bỏ qua khi chạy lại. Database đã có schema cũ cần migration riêng, không chỉ chạy lại file này.
 
 Seed thực sự trong SQL hiện chỉ gồm 4 vai trò. Các mục seed 300 thiết bị/1.000 phiếu ở trên là kế hoạch, chưa được file SQL này thực hiện.
+
+## Chốt tên vai trò ngày 11/11/2026
+
+- Seed trong `smart_cmms_db.sql` dùng `MAINTENANCE_MANAGER`, khớp AuthService và quyền trong AuthController.
+- `verify-schema.cjs` tra vai trò theo tên mới khi tạo user kiểm thử và kiểm tra cập nhật Role.
+- Không đổi ID vai trò, không tự chuyển tài khoản đang dùng vai trò cũ trong database. Không chạy lại toàn bộ schema để đổi tên role trên database đã có dữ liệu; cần xử lý dữ liệu riêng sau khi kiểm tra các role/tài khoản hiện có.

@@ -12,7 +12,7 @@ export class UpdateUserDto {
   @IsString()
   phoneNumber?: string;
 
-  @ApiPropertyOptional({ example: 3, description: 'Role ID: 1=ADMIN, 2=MANAGER, 3=TECHNICIAN' })
+  @ApiPropertyOptional({ example: 3, description: 'Role ID from GET /auth/roles (ADMIN, MAINTENANCE_MANAGER, TECHNICIAN, WAREHOUSE_KEEPER); IDs depend on database data' })
   @IsOptional()
   @IsInt()
   roleId?: number;
