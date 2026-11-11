@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Asset, AssetStatus } from './entities/asset.entity';
+import { Asset, AssetStatus, AssetCriticality } from './entities/asset.entity';
 import { AssetHistory } from '../history/entities/asset-history.entity';
 import { RedisService } from '../../common/redis/redis.service';
 import {
@@ -14,6 +14,7 @@ import {
   UpdateAssetDto,
   UpdateAssetStatusDto,
 } from './dto/create-asset.dto';
+import { QrCodeUtil, QrLabelPayload } from '../../common/utils/qr-code.util';
 
 @Injectable()
 export class AssetsService {
@@ -25,14 +26,14 @@ export class AssetsService {
     private readonly redisService: RedisService,
   ) {}
 
-  // 1. LẤY DANH SÁCH TÀI SẢN (Hỗ trợ phân trang, tìm kiếm mã/tên, lọc trạng thái, lọc xưởng kèm Redis Cache)
+  // 1. LẤY DANH SÁCH TÀI SẢN (Hỗ trợ phân trang, tìm kiếm mã/tên/model/seri, lọc trạng thái, lọc xưởng kèm Redis Cache)
   async findAll(query: QueryAssetDto) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 10;
     const skip = (page - 1) * limit;
 
     // 1.1. Tạo key định danh cache theo toàn bộ bộ lọc
-    const cacheKey = `assets:list:${page}:${limit}:${query.search || ''}:${query.status || ''}:${query.locationId || ''}:${query.category || ''}`;
+    const cacheKey = `assets:list:${page}:${limit}:${query.search || ''}:${query.status || ''}:${query.locationId || ''}:${query.category || ''}:${query.model || ''}:${query.criticality || ''}`;
 
     // 1.2. Thử lấy dữ liệu từ Redis Cache trước
     const cachedData = await this.redisService.get<any>(cacheKey);
@@ -52,23 +53,41 @@ export class AssetsService {
       .leftJoinAndSelect('asset.location', 'location')
       .where('asset.isActive = :isActive', { isActive: true });
 
+    // Tìm kiếm đa năng: Mã AST-xxx, Tên máy, Model, Hãng SX, Số seri
     if (query.search) {
       queryBuilder.andWhere(
-        '(asset.assetCode ILIKE :search OR asset.name ILIKE :search OR asset.serialNumber ILIKE :search)',
+        '(asset.assetCode ILIKE :search OR asset.name ILIKE :search OR asset.model ILIKE :search OR asset.manufacturer ILIKE :search OR asset.serialNumber ILIKE :search)',
         { search: `%${query.search}%` },
       );
     }
 
+    // Lọc theo Model
+    if (query.model) {
+      queryBuilder.andWhere('asset.model ILIKE :model', {
+        model: `%${query.model}%`,
+      });
+    }
+
+    // Lọc theo Trạng thái vận hành (OPERATIONAL, DOWN, MAINTENANCE, DECOMMISSIONED)
     if (query.status) {
       queryBuilder.andWhere('asset.status = :status', { status: query.status });
     }
 
+    // Lọc theo Mức độ quan trọng (LOW, MEDIUM, HIGH, CRITICAL)
+    if (query.criticality) {
+      queryBuilder.andWhere('asset.criticality = :criticality', {
+        criticality: query.criticality,
+      });
+    }
+
+    // Lọc theo Vị trí nhà xưởng
     if (query.locationId) {
       queryBuilder.andWhere('asset.locationId = :locationId', {
         locationId: query.locationId,
       });
     }
 
+    // Lọc theo Nhóm thiết bị (Cơ khí, Thủy lực, Điện tự động...)
     if (query.category) {
       queryBuilder.andWhere('asset.category ILIKE :category', {
         category: `%${query.category}%`,
@@ -106,6 +125,7 @@ export class AssetsService {
       where: { id, isActive: true },
       relations: [
         'location',
+        'location.parent',
         'bomParts',
         'bomParts.part',
       ],
@@ -118,12 +138,12 @@ export class AssetsService {
     return asset;
   }
 
-  // 3. TRA CỨU THEO MÃ QR CODE (Dành riêng cho Mobile Flutter khi quét mã hiện trường)
+  // 3. TRA CỨU THEO MÃ QR CODE / MÃ ASSET CODE (Phục vụ Mobile Flutter quét hiện trường)
   async findByCode(assetCode: string): Promise<Asset> {
     const cleanCode = assetCode.trim().toUpperCase();
     const asset = await this.assetRepo.findOne({
       where: { assetCode: cleanCode, isActive: true },
-      relations: ['location', 'bomParts', 'bomParts.part'],
+      relations: ['location', 'location.parent', 'bomParts', 'bomParts.part'],
     });
 
     if (!asset) {
@@ -146,8 +166,8 @@ export class AssetsService {
       throw new ConflictException(`Mã tài sản '${assetCode}' đã tồn tại trên hệ thống!`);
     }
 
-    // Tự sinh URL QR code định danh chuẩn cho Mobile Scanner
-    const qrCodeUrl = `cmms://assets/code/${assetCode}`;
+    // URL định danh chuẩn cho Mobile Scanner
+    const qrCodeUrl = `https://cmms.local/assets/code/${assetCode}`;
 
     const newAsset = this.assetRepo.create({
       ...dto,
@@ -179,27 +199,24 @@ export class AssetsService {
     }
 
     const saved = await this.assetRepo.save(asset);
-    // Invalidate cache
     await this.redisService.delByPattern('assets:*');
     return saved;
   }
 
-  // 6. CẬP NHẬT THÔNG TIN TÀI SẢN
+  // 6. CẬP NHẬT THÔNG TIN THIẾT BỊ
   async update(id: string, dto: UpdateAssetDto): Promise<Asset> {
     const asset = await this.findOne(id);
     Object.assign(asset, dto);
     const saved = await this.assetRepo.save(asset);
-    // Invalidate cache
     await this.redisService.delByPattern('assets:*');
     return saved;
   }
 
-  // 7. XÓA TÀI SẢN (Xóa mềm - Soft delete)
-  async remove(id: string): Promise<{ success: boolean; message: string }> {
+  // 7. VÔ HIỆU HÓA TÀI SẢN (SOFT DELETE)
+  async remove(id: string) {
     const asset = await this.findOne(id);
     asset.isActive = false;
     await this.assetRepo.save(asset);
-    // Invalidate cache
     await this.redisService.delByPattern('assets:*');
     return {
       success: true,
@@ -209,7 +226,6 @@ export class AssetsService {
 
   // 8. XEM LỊCH SỬ BẢO TRÌ CỦA MỘT TÀI SẢN CỤ THỂ (KÈM REDIS CACHE)
   async getMaintenanceHistory(assetId: string) {
-    // 8.1. Kiểm tra Redis Cache
     const cacheKey = `assets:history:${assetId}`;
     const cachedHistory = await this.redisService.get<any>(cacheKey);
     if (cachedHistory) {
@@ -219,7 +235,6 @@ export class AssetsService {
       };
     }
 
-    // 8.2. Kiểm tra tài sản có tồn tại không
     await this.findOne(assetId);
 
     const history = await this.historyRepo.find({
@@ -228,7 +243,6 @@ export class AssetsService {
       order: { createdAt: 'DESC' },
     });
 
-    // Thống kê sơ bộ các chỉ số của máy
     const failureLogs = history.filter((h) => h.isFailureCounted);
     const totalRepairHours = failureLogs.reduce(
       (sum, h) => sum + Number(h.actualRepairTimeHours || 0),
@@ -256,57 +270,42 @@ export class AssetsService {
       fromCache: false,
     };
 
-    // 8.3. Lưu vào Redis Cache trong 180 giây (3 phút)
     await this.redisService.set(cacheKey, result, 180);
-
     return result;
   }
 
-  // 9. QUÉT MÃ QR HOẶC NHẬP ASSET ID: XEM CHI TIẾT THIẾT BỊ KÈM DANH SÁCH PHỤ TÙNG CẦN THAY ĐỊNH KỲ
+  // 9. QUÉT MÃ QR TRA CỨU CHI TIẾT & ĐÁNH GIÁ ĐỊNH MỨC PHỤ TÙNG BOM
   async scanQrAndGetInspectionDetails(identifier: string) {
-    if (!identifier || identifier.trim() === '') {
-      throw new NotFoundException('Mã QR hoặc ID thiết bị không được để trống!');
+    let asset: Asset | null = null;
+    const cleanInput = identifier.trim();
+
+    // Thử tìm theo ID (nếu là UUID)
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanInput);
+    if (isUUID) {
+      asset = await this.assetRepo.findOne({
+        where: { id: cleanInput, isActive: true },
+        relations: ['location', 'location.parent', 'bomParts', 'bomParts.part'],
+      });
     }
 
-    // Chuẩn hóa identifier (Bóc tách mã nếu là URL hoặc Schema QR Code)
-    let parsedCode = identifier.trim();
-    if (parsedCode.includes('cmms://assets/code/')) {
-      parsedCode = parsedCode.replace('cmms://assets/code/', '').trim();
-    } else if (parsedCode.includes('/code/')) {
-      parsedCode = parsedCode.substring(parsedCode.lastIndexOf('/code/') + 6).trim();
-    } else if (parsedCode.includes('/assets/')) {
-      parsedCode = parsedCode.substring(parsedCode.lastIndexOf('/assets/') + 8).trim();
+    // Nếu chưa thấy, tìm theo Asset Code
+    if (!asset) {
+      asset = await this.assetRepo.findOne({
+        where: { assetCode: cleanInput.toUpperCase(), isActive: true },
+        relations: ['location', 'location.parent', 'bomParts', 'bomParts.part'],
+      });
     }
-
-    // Nhận diện định dạng UUID hay Asset Code (AST-xxx / COMP-xxx)
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parsedCode);
-
-    const asset = await this.assetRepo.findOne({
-      where: isUuid
-        ? { id: parsedCode, isActive: true }
-        : { assetCode: parsedCode.toUpperCase(), isActive: true },
-      relations: [
-        'location',
-        'location.parent',
-        'bomParts',
-        'bomParts.part',
-      ],
-    });
 
     if (!asset) {
-      throw new NotFoundException(
-        `Không tìm thấy thiết bị tương ứng với mã quét QR: '${identifier}'`,
-      );
+      throw new NotFoundException(`Không tìm thấy thiết bị từ mã quét QR: ${identifier}`);
     }
 
-    // Lấy toàn bộ lịch sử sửa chữa/bảo trì của máy
     const history = await this.historyRepo.find({
       where: { assetId: asset.id },
       relations: ['performedBy'],
       order: { createdAt: 'DESC' },
     });
 
-    // Phân tích danh sách phụ tùng định mức cần thay thế định kỳ
     const currentOperatingHours = Number(asset.operatingHours || 0);
 
     const periodicReplacementParts = (asset.bomParts || []).map((bom) => {
@@ -314,7 +313,6 @@ export class AssetsService {
       const intervalHours = bom.replacementIntervalHours ? Number(bom.replacementIntervalHours) : null;
       const intervalDays = bom.replacementIntervalDays ? Number(bom.replacementIntervalDays) : null;
 
-      // Tìm trong lịch sử xem phụ tùng này được thay thế gần nhất khi nào
       let lastReplacedOperatingHours = 0;
       let lastReplacedDate: Date | null = null;
 
@@ -331,7 +329,6 @@ export class AssetsService {
         }
       }
 
-      // Tính toán chu kỳ thay thế
       let hoursSinceLastReplacement = currentOperatingHours - lastReplacedOperatingHours;
       if (hoursSinceLastReplacement < 0) hoursSinceLastReplacement = 0;
 
@@ -341,15 +338,14 @@ export class AssetsService {
       if (intervalHours && intervalHours > 0) {
         remainingHours = Number((intervalHours - hoursSinceLastReplacement).toFixed(2));
         if (remainingHours <= 0) {
-          maintenanceStatus = 'OVERDUE'; // Đã quá hạn thay thế định kỳ!
+          maintenanceStatus = 'OVERDUE';
         } else if (remainingHours <= 50) {
-          maintenanceStatus = 'DUE_SOON'; // Sắp đến hạn thay trong vòng 50 giờ máy chạy
+          maintenanceStatus = 'DUE_SOON';
         } else {
-          maintenanceStatus = 'GOOD'; // Đang hoạt động tốt
+          maintenanceStatus = 'GOOD';
         }
       }
 
-      // Kiểm tra tình trạng tồn kho thực tế
       const inStock = Number(part.currentStock || 0);
       const standardQty = Number(bom.standardQuantity || 1);
       let stockStatus: 'AVAILABLE' | 'LOW_STOCK' | 'OUT_OF_STOCK' = 'AVAILABLE';
@@ -368,25 +364,21 @@ export class AssetsService {
         unit: part.unit,
         unitPrice: Number(part.unitPrice),
         standardQuantity: standardQty,
-        installationPosition: bom.installationPosition || 'Hệ thống máy nén khí',
+        installationPosition: bom.installationPosition || 'Trục truyền động',
         isCritical: bom.isCritical,
-        // Thông tin định mức
         replacementIntervalHours: intervalHours,
         replacementIntervalDays: intervalDays,
-        // Dữ liệu theo dõi thực tế
         lastReplacedDate,
         lastReplacedOperatingHours,
         hoursSinceLastReplacement: Number(hoursSinceLastReplacement.toFixed(2)),
         remainingHoursUntilReplacement: remainingHours,
-        maintenanceStatus, // OVERDUE | DUE_SOON | GOOD
-        // Dữ liệu tồn kho
+        maintenanceStatus,
         currentStock: inStock,
         shelfLocation: part.shelfLocation || 'Chưa xếp kệ',
-        stockStatus, // AVAILABLE | LOW_STOCK | OUT_OF_STOCK
+        stockStatus,
       };
     });
 
-    // Thống kê chỉ số MTTR & MTBF của thiết bị
     const failureLogs = history.filter((h) => h.isFailureCounted);
     const totalRepairHours = failureLogs.reduce(
       (sum, h) => sum + Number(h.actualRepairTimeHours || 0),
@@ -436,6 +428,146 @@ export class AssetsService {
       },
       periodicReplacementParts,
       recentMaintenanceHistory: history.slice(0, 5),
+    };
+  }
+
+  // ================= TÍCH HỢP THƯ VIỆN SINH MÃ QR DUY NHẤT =================
+
+  /**
+   * 10. SINH VÀ LẤY DỮ LIỆU MÃ QR KÈM TEM NHÃN IN ẤN
+   */
+  async getQrCodeData(idOrCode: string) {
+    let asset: Asset | null = null;
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idOrCode);
+
+    if (isUUID) {
+      asset = await this.findOne(idOrCode);
+    } else {
+      asset = await this.findByCode(idOrCode);
+    }
+
+    const qrPayload = QrCodeUtil.formatAssetQrPayload(asset);
+    const qrDataUrl = await QrCodeUtil.toDataURL(qrPayload);
+
+    return {
+      success: true,
+      assetId: asset.id,
+      assetCode: asset.assetCode,
+      name: asset.name,
+      model: asset.model || 'N/A',
+      serialNumber: asset.serialNumber || 'N/A',
+      category: asset.category,
+      locationName: asset.location ? asset.location.name : 'Chưa phân xưởng',
+      qrDataUrl, // Chuỗi base64 PNG để thẻ <img src={qrDataUrl} /> hiển thị ngay
+      qrRawContent: qrPayload,
+      printLabel: {
+        company: 'ZENTECH SMART CMMS',
+        title: 'TEM ĐỊNH DANH THIẾT BỊ',
+        assetCode: asset.assetCode,
+        name: asset.name,
+        model: asset.model || 'N/A',
+        serialNumber: asset.serialNumber || 'N/A',
+        location: asset.location ? asset.location.name : 'Chưa phân bổ',
+        installDate: asset.installDate ? asset.installDate.toString() : 'N/A',
+        operatingHours: `${Number(asset.operatingHours || 0).toLocaleString()} h`,
+        status: asset.status,
+      },
+    };
+  }
+
+  /**
+   * 11. SINH BUFFER ẢNH PNG PHỤC VỤ STREAM TẢI FILE TRỰC TIẾP
+   */
+  async getQrBuffer(idOrCode: string): Promise<{ buffer: Buffer; assetCode: string }> {
+    let asset: Asset | null = null;
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idOrCode);
+
+    if (isUUID) {
+      asset = await this.findOne(idOrCode);
+    } else {
+      asset = await this.findByCode(idOrCode);
+    }
+
+    const qrPayload = QrCodeUtil.formatAssetQrPayload(asset);
+    const buffer = await QrCodeUtil.toBuffer(qrPayload);
+
+    return { buffer, assetCode: asset.assetCode };
+  }
+
+  /**
+   * 12. THỐNG KÊ TỔNG QUAN TÀI SẢN CHO DASHBOARD
+   */
+  async getOverview() {
+    const assets = await this.assetRepo.find({
+      where: { isActive: true },
+      relations: ['location'],
+    });
+
+    const total = assets.length;
+    let operational = 0;
+    let down = 0;
+    let maintenance = 0;
+    let decommissioned = 0;
+
+    let critical = 0;
+    let high = 0;
+    let medium = 0;
+    let low = 0;
+
+    let sumOperatingHours = 0;
+    let sumMttr = 0;
+    let sumMtbf = 0;
+    let mttrCount = 0;
+    let mtbfCount = 0;
+
+    assets.forEach((a) => {
+      // Trạng thái
+      if (a.status === AssetStatus.OPERATIONAL) operational++;
+      else if (a.status === AssetStatus.DOWN) down++;
+      else if (a.status === AssetStatus.MAINTENANCE) maintenance++;
+      else if (a.status === AssetStatus.DECOMMISSIONED) decommissioned++;
+
+      // Độ quan trọng
+      if (a.criticality === AssetCriticality.CRITICAL) critical++;
+      else if (a.criticality === AssetCriticality.HIGH) high++;
+      else if (a.criticality === AssetCriticality.MEDIUM) medium++;
+      else if (a.criticality === AssetCriticality.LOW) low++;
+
+      sumOperatingHours += Number(a.operatingHours || 0);
+
+      const mttr = Number(a.cachedMttrHours || 0);
+      if (mttr > 0) {
+        sumMttr += mttr;
+        mttrCount++;
+      }
+
+      const mtbf = Number(a.cachedMtbfHours || 0);
+      if (mtbf > 0) {
+        sumMtbf += mtbf;
+        mtbfCount++;
+      }
+    });
+
+    return {
+      success: true,
+      totalAssets: total,
+      statusBreakdown: {
+        OPERATIONAL: operational,
+        DOWN: down,
+        MAINTENANCE: maintenance,
+        DECOMMISSIONED: decommissioned,
+      },
+      criticalityBreakdown: {
+        CRITICAL: critical,
+        HIGH: high,
+        MEDIUM: medium,
+        LOW: low,
+      },
+      metrics: {
+        totalOperatingHours: Number(sumOperatingHours.toFixed(2)),
+        avgMttrHours: mttrCount > 0 ? Number((sumMttr / mttrCount).toFixed(2)) : 0,
+        avgMtbfHours: mtbfCount > 0 ? Number((sumMtbf / mtbfCount).toFixed(2)) : 0,
+      },
     };
   }
 }

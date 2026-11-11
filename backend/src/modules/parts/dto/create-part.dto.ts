@@ -14,49 +14,107 @@ import { TransactionType } from '../entities/part-transaction.entity';
 import { MaintenanceEventType } from '../../history/entities/asset-history.entity';
 
 export class CreatePartDto {
-  @ApiProperty({ example: 'PART-001', description: 'Mã phụ tùng duy nhất' })
+  @ApiProperty({ example: 'PART-001', description: 'Mã phụ tùng duy nhất (VD: PART-001, PART-050)' })
   @IsNotEmpty({ message: 'Mã phụ tùng không được để trống' })
   @IsString()
   @MaxLength(50)
   partCode: string;
 
-  @ApiProperty({ example: 'Vòng bi SKF 6205-2RSH', description: 'Tên phụ tùng' })
+  @ApiProperty({ example: 'Vòng bi SKF 6205-2RSH', description: 'Tên chi tiết phụ tùng' })
   @IsNotEmpty({ message: 'Tên phụ tùng không được để trống' })
   @IsString()
   @MaxLength(200)
   name: string;
 
-  @ApiProperty({ example: 'Bạc đạn', description: 'Loại phụ tùng' })
+  @ApiProperty({ example: 'Bạc đạn', description: 'Loại / Danh mục phụ tùng' })
   @IsNotEmpty({ message: 'Loại phụ tùng không được để trống' })
   @IsString()
   @MaxLength(100)
   category: string;
 
-  @ApiPropertyOptional({ example: 'Cái', default: 'Cái' })
+  @ApiPropertyOptional({ example: 'Cái', default: 'Cái', description: 'Đơn vị tính (Cái, Bộ, Lít, Mét, Cuộn)' })
   @IsOptional()
   @IsString()
   unit?: string = 'Cái';
 
-  @ApiPropertyOptional({ example: 450000, description: 'Đơn giá vốn (VNĐ)' })
+  @ApiPropertyOptional({ example: 450000, description: 'Đơn giá vốn nhập kho (VNĐ)' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
   unitPrice?: number = 0;
 
-  @ApiPropertyOptional({ example: 20, description: 'Tồn kho ban đầu' })
+  @ApiPropertyOptional({ example: 20, description: 'Số lượng tồn kho ban đầu (currentStock / quantity_on_hand)' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
   currentStock?: number = 0;
 
-  @ApiPropertyOptional({ example: 5, description: 'Ngưỡng tồn kho tối thiểu' })
+  @ApiPropertyOptional({ example: 20, description: 'Bí danh số lượng tồn kho (quantity_on_hand)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  quantityOnHand?: number;
+
+  @ApiPropertyOptional({ example: 5, description: 'Ngưỡng tồn kho tối thiểu cảnh báo cần nhập thêm (minimum_stock)' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
   minimumStock?: number = 5;
+
+  @ApiPropertyOptional({ example: 100, description: 'Mức tồn kho tối đa' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  maximumStock?: number;
+
+  @ApiPropertyOptional({ example: 'Kệ B - Tầng 2 - Ngăn 03', description: 'Vị trí giá / kệ trong kho' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  shelfLocation?: string;
+
+  @ApiPropertyOptional({ example: 'Công ty TNHH Vòng Bi SKF Việt Nam', description: 'Nhà cung cấp / đối tác' })
+  @IsOptional()
+  @IsString()
+  supplierInfo?: string;
+}
+
+export class UpdatePartDto {
+  @ApiPropertyOptional({ example: 'Vòng bi SKF 6205-2RSH (Chính hãng)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  name?: string;
+
+  @ApiPropertyOptional({ example: 'Bạc đạn' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  category?: string;
+
+  @ApiPropertyOptional({ example: 'Cái' })
+  @IsOptional()
+  @IsString()
+  unit?: string;
+
+  @ApiPropertyOptional({ example: 480000 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  unitPrice?: number;
+
+  @ApiPropertyOptional({ example: 5, description: 'Ngưỡng tồn kho tối thiểu (minimum_stock)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  minimumStock?: number;
 
   @ApiPropertyOptional({ example: 100 })
   @IsOptional()
@@ -65,16 +123,52 @@ export class CreatePartDto {
   @Min(0)
   maximumStock?: number;
 
-  @ApiPropertyOptional({ example: 'Kệ B - Ngăn 03' })
+  @ApiPropertyOptional({ example: 'Kệ A - Tầng 1 - Ngăn 02' })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   shelfLocation?: string;
 
-  @ApiPropertyOptional({ example: 'Công ty Vòng Bi SKF Việt Nam' })
+  @ApiPropertyOptional({ example: 'Nhà phân phối SKF Miền Nam' })
   @IsOptional()
   @IsString()
   supplierInfo?: string;
+}
+
+export class QueryPartDto {
+  @ApiPropertyOptional({ example: 1, default: 1, description: 'Số trang' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  page?: number = 1;
+
+  @ApiPropertyOptional({ example: 10, default: 10, description: 'Số bản ghi trên 1 trang' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  limit?: number = 10;
+
+  @ApiPropertyOptional({
+    example: 'SKF',
+    description: 'Tìm kiếm theo mã phụ tùng, tên, kệ kho hoặc nhà cung cấp',
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ example: 'Bạc đạn', description: 'Lọc theo danh mục phụ tùng' })
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional({
+    example: false,
+    description: 'Chỉ lọc các phụ tùng sắp hết hàng (currentStock <= minimumStock)',
+  })
+  @IsOptional()
+  lowStockOnly?: boolean | string;
 }
 
 export class AdjustStockDto {
@@ -158,7 +252,6 @@ export class CreateAssetPartBomDto {
   notes?: string;
 }
 
-// ================= DTO XUẤT PHỤ TÙNG RA SỬA CHỮA THIẾT BỊ =================
 export class IssuePartToAssetDto {
   @ApiProperty({
     example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',

@@ -7,7 +7,7 @@ import {
 } from 'typeorm';
 import { AppBaseEntity } from '../../../common/base.entity';
 import { Asset } from '../../assets/entities/asset.entity';
-import { AssetStatus } from '../../assets/entities/asset.enums';
+import { AssetStatus } from '../../assets/enums/asset.enums';
 import { WorkOrder } from '../../work-orders/entities/work-order.entity';
 import { User } from '../../auth/entities/user.entity';
 

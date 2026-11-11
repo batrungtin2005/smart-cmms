@@ -11,9 +11,8 @@ import { Location } from '../../locations/entities/location.entity';
 import { AssetHistory } from '../../history/entities/asset-history.entity';
 import { AssetPartBom } from '../../parts/entities/asset-part-bom.entity';
 import { WorkOrder } from '../../work-orders/entities/work-order.entity';
-
-import { AssetStatus, AssetCriticality } from './asset.enums';
-export { AssetStatus, AssetCriticality } from './asset.enums';
+import { AssetStatus, AssetCriticality } from '../enums/asset.enums';
+export { AssetStatus, AssetCriticality };
 
 @Entity('assets')
 export class Asset extends AppBaseEntity {

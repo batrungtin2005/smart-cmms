@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { Part } from './entities/part.entity';
+import { Part, PartStatus } from './entities/part.entity';
 import { AssetPartBom } from './entities/asset-part-bom.entity';
 import {
   PartTransaction,
@@ -22,6 +22,8 @@ import {
   CreateAssetPartBomDto,
   CreatePartDto,
   IssuePartToAssetDto,
+  QueryPartDto,
+  UpdatePartDto,
 } from './dto/create-part.dto';
 
 @Injectable()
@@ -36,20 +38,73 @@ export class PartsService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async findAll(lowStockOnly = false) {
+  /**
+   * 1. LẤY DANH SÁCH PHỤ TÙNG (Hỗ trợ phân trang, tìm kiếm, lọc danh mục, cảnh báo hết hàng)
+   */
+  async findAll(query?: QueryPartDto) {
+    const page = Number(query?.page) || 1;
+    const limit = Number(query?.limit) || 10;
+    const skip = (page - 1) * limit;
+
     const qb = this.partRepo
       .createQueryBuilder('part')
       .where('part.isActive = :isActive', { isActive: true });
 
-    if (lowStockOnly) {
+    // Tìm kiếm đa năng: Mã phụ tùng, Tên, Danh mục, Kệ kho, Nhà cung cấp
+    if (query?.search) {
+      qb.andWhere(
+        '(part.partCode ILIKE :search OR part.name ILIKE :search OR part.category ILIKE :search OR part.shelfLocation ILIKE :search OR part.supplierInfo ILIKE :search)',
+        { search: `%${query.search}%` },
+      );
+    }
+
+    // Lọc theo danh mục
+    if (query?.category) {
+      qb.andWhere('part.category ILIKE :category', {
+        category: `%${query.category}%`,
+      });
+    }
+
+    // Lọc danh sách sắp hết hàng (currentStock <= minimumStock)
+    const isLowStock =
+      query?.lowStockOnly === true || query?.lowStockOnly === 'true';
+    if (isLowStock) {
       qb.andWhere('part.currentStock <= part.minimumStock');
     }
 
-    qb.orderBy('part.partCode', 'ASC');
-    return qb.getMany();
+    qb.orderBy('part.partCode', 'ASC')
+      .skip(skip)
+      .take(limit);
+
+    const [items, total] = await qb.getManyAndCount();
+
+    const formattedData = items.map((part) => ({
+      ...part,
+      quantityOnHand: part.currentStock,
+      stockStatus:
+        part.currentStock <= 0
+          ? PartStatus.OUT_OF_STOCK
+          : part.currentStock <= part.minimumStock
+            ? PartStatus.LOW_STOCK
+            : PartStatus.IN_STOCK,
+    }));
+
+    return {
+      success: true,
+      data: formattedData,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
-  async findOne(id: string): Promise<Part> {
+  /**
+   * 2. XEM CHI TIẾT MỘT PHỤ TÙNG
+   */
+  async findOne(id: string): Promise<any> {
     const part = await this.partRepo.findOne({
       where: { id, isActive: true },
       relations: ['bomLinks', 'bomLinks.asset'],
@@ -59,9 +114,21 @@ export class PartsService {
       throw new NotFoundException(`Không tìm thấy phụ tùng với ID: ${id}`);
     }
 
-    return part;
+    return {
+      ...part,
+      quantityOnHand: part.currentStock,
+      stockStatus:
+        part.currentStock <= 0
+          ? PartStatus.OUT_OF_STOCK
+          : part.currentStock <= part.minimumStock
+            ? PartStatus.LOW_STOCK
+            : PartStatus.IN_STOCK,
+    };
   }
 
+  /**
+   * 3. THÊM MỚI PHỤ TÙNG VÀO DANH MỤC KHO
+   */
   async create(dto: CreatePartDto): Promise<Part> {
     const partCode = dto.partCode.trim().toUpperCase();
     const existing = await this.partRepo.findOne({ where: { partCode } });
@@ -70,12 +137,119 @@ export class PartsService {
       throw new ConflictException(`Mã phụ tùng '${partCode}' đã tồn tại!`);
     }
 
+    // Hỗ trợ cả 2 tên trường: quantity_on_hand hoặc current_stock
+    const initialStock = dto.quantityOnHand !== undefined ? dto.quantityOnHand : (dto.currentStock || 0);
+
     const part = this.partRepo.create({
       ...dto,
       partCode,
+      currentStock: initialStock,
+      minimumStock: dto.minimumStock !== undefined ? dto.minimumStock : 5,
     });
 
     return this.partRepo.save(part);
+  }
+
+  /**
+   * 4. CẬP NHẬT THÔNG TIN PHỤ TÙNG
+   */
+  async update(id: string, dto: UpdatePartDto): Promise<Part> {
+    const part = await this.partRepo.findOne({ where: { id, isActive: true } });
+    if (!part) {
+      throw new NotFoundException(`Không tìm thấy phụ tùng với ID: ${id}`);
+    }
+
+    Object.assign(part, dto);
+    return this.partRepo.save(part);
+  }
+
+  /**
+   * 5. VÔ HIỆU HÓA PHỤ TÙNG (SOFT DELETE)
+   */
+  async remove(id: string): Promise<{ success: boolean; message: string }> {
+    const part = await this.partRepo.findOne({ where: { id, isActive: true } });
+    if (!part) {
+      throw new NotFoundException(`Không tìm thấy phụ tùng với ID: ${id}`);
+    }
+
+    part.isActive = false;
+    await this.partRepo.save(part);
+
+    return {
+      success: true,
+      message: `Đã vô hiệu hóa thành công phụ tùng ${part.partCode} - ${part.name}`,
+    };
+  }
+
+  /**
+   * 6. LẤY DANH SÁCH CẢNH BÁO TỒN KHO DƯỚI NGƯỠNG AN TOÀN (LOW STOCK ALERTS)
+   */
+  async getLowStockAlerts() {
+    const lowStockParts = await this.partRepo
+      .createQueryBuilder('part')
+      .where('part.isActive = :isActive', { isActive: true })
+      .andWhere('part.currentStock <= part.minimumStock')
+      .orderBy('part.currentStock', 'ASC')
+      .getMany();
+
+    return {
+      success: true,
+      alertCount: lowStockParts.length,
+      alerts: lowStockParts.map((p) => ({
+        partId: p.id,
+        partCode: p.partCode,
+        name: p.name,
+        category: p.category,
+        unit: p.unit,
+        unitPrice: Number(p.unitPrice),
+        currentStock: p.currentStock,
+        quantityOnHand: p.currentStock,
+        minimumStock: p.minimumStock,
+        shortageQuantity: Math.max(0, p.minimumStock - p.currentStock),
+        shelfLocation: p.shelfLocation || 'Chưa xếp kệ',
+        supplierInfo: p.supplierInfo,
+        severity: p.currentStock === 0 ? 'CRITICAL_OUT_OF_STOCK' : 'WARNING_LOW_STOCK',
+      })),
+    };
+  }
+
+  /**
+   * 7. THỐNG KÊ TỔNG QUAN KHO VẬT TƯ & TỔNG GIÁ TRỊ TỒN KHO
+   */
+  async getInventoryOverview() {
+    const allParts = await this.partRepo.find({ where: { isActive: true } });
+
+    let totalQuantityOnHand = 0;
+    let totalInventoryValue = 0;
+    let lowStockCount = 0;
+    let outOfStockCount = 0;
+
+    allParts.forEach((p) => {
+      const stock = Number(p.currentStock || 0);
+      const price = Number(p.unitPrice || 0);
+
+      totalQuantityOnHand += stock;
+      totalInventoryValue += stock * price;
+
+      if (stock <= 0) {
+        outOfStockCount++;
+      } else if (stock <= p.minimumStock) {
+        lowStockCount++;
+      }
+    });
+
+    return {
+      success: true,
+      overview: {
+        totalPartTypes: allParts.length,
+        totalQuantityOnHand,
+        totalInventoryValueVNĐ: totalInventoryValue,
+        inStockCount: allParts.length - lowStockCount - outOfStockCount,
+        lowStockCount,
+        outOfStockCount,
+        needsReorder: lowStockCount + outOfStockCount > 0,
+      },
+    };
   }
 
   // ================= ĐỊNH MỨC PHỤ TÙNG CHO THIẾT BỊ (BOM) =================
@@ -108,7 +282,6 @@ export class PartsService {
     await queryRunner.startTransaction();
 
     try {
-      // Khóa dòng dữ liệu (Pessimistic Write Lock) ngăn chặn race condition khi nhiều kỹ thuật viên xuất cùng lúc
       const part = await queryRunner.manager.findOne(Part, {
         where: { id: partId },
         lock: { mode: 'pessimistic_write' },
@@ -131,13 +304,12 @@ export class PartsService {
         }
         stockAfter = stockBefore - dto.quantity;
       } else if (dto.transactionType === TransactionType.ADJUSTMENT) {
-        stockAfter = dto.quantity; // Điều chỉnh kiểm kê về giá trị thực
+        stockAfter = dto.quantity;
       }
 
       part.currentStock = stockAfter;
       await queryRunner.manager.save(part);
 
-      // Ghi log biến động kho
       const transaction = queryRunner.manager.create(PartTransaction, {
         partId,
         workOrderId: dto.workOrderId || null,
@@ -163,19 +335,13 @@ export class PartsService {
     }
   }
 
-  // =====================================================================================
-  // LOGIC CỐT LÕI: XUẤT PHỤ TÙNG SỬA CHỮA CHO TÀI SẢN
-  // 1. Tự động trừ số lượng tồn kho trong bảng parts (Pessimistic Lock chống âm kho)
-  // 2. Tự động ghi vết vào bảng part_transactions
-  // 3. Tự động ghi 1 dòng mới vào bảng lịch sử sửa chữa asset_maintenance_history
-  // =====================================================================================
+  // ================= XUẤT PHỤ TÙNG SỬA CHỮA CHO TÀI SẢN (GIAO DỊCH ACID) =================
   async issuePartToAsset(dto: IssuePartToAssetDto) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      // 1. Khóa bi quan (Pessimistic Write Lock) trên bản ghi phụ tùng
       const part = await queryRunner.manager.findOne(Part, {
         where: { id: dto.partId, isActive: true },
         lock: { mode: 'pessimistic_write' },
@@ -185,7 +351,6 @@ export class PartsService {
         throw new NotFoundException(`Không tìm thấy phụ tùng với ID: ${dto.partId}`);
       }
 
-      // 2. Kiểm tra tồn kho an toàn
       const stockBefore = part.currentStock;
       if (stockBefore < dto.quantity) {
         throw new BadRequestException(
@@ -193,7 +358,6 @@ export class PartsService {
         );
       }
 
-      // 3. Kiểm tra thông tin thiết bị / tài sản nhận phụ tùng
       const asset = await queryRunner.manager.findOne(Asset, {
         where: { id: dto.assetId, isActive: true },
       });
@@ -202,12 +366,10 @@ export class PartsService {
         throw new NotFoundException(`Không tìm thấy tài sản / thiết bị với ID: ${dto.assetId}`);
       }
 
-      // 4. TRỪ SỐ LƯỢNG TỒN KHO TRONG BẢNG PARTS
       const stockAfter = stockBefore - dto.quantity;
       part.currentStock = stockAfter;
       await queryRunner.manager.save(part);
 
-      // 5. GHI LOG BIẾN ĐỘNG KHO (part_transactions)
       const costParts = Number(part.unitPrice) * dto.quantity;
       const partTx = queryRunner.manager.create(PartTransaction, {
         partId: part.id,
@@ -225,7 +387,6 @@ export class PartsService {
       });
       await queryRunner.manager.save(partTx);
 
-      // 6. TỰ ĐỘNG GHI MỘT DÒNG MỚI VÀO BẢNG LỊCH SỬ SỬA CHỮA (AssetHistory)
       const eventType = dto.eventType || MaintenanceEventType.PART_REPLACEMENT;
       const isBreakdown =
         eventType === MaintenanceEventType.BREAKDOWN ||
@@ -270,13 +431,11 @@ export class PartsService {
 
       const savedHistory = await queryRunner.manager.save(historyLog);
 
-      // 7. CẬP NHẬT TRẠNG THÁI THIẾT BỊ NẾU ĐANG DỪNG MÁY / BẢO TRÌ
       if (asset.status !== AssetStatus.OPERATIONAL) {
         asset.status = AssetStatus.OPERATIONAL;
         await queryRunner.manager.save(asset);
       }
 
-      // Hoàn tất transaction toàn vẹn ACID
       await queryRunner.commitTransaction();
 
       return {
@@ -290,6 +449,7 @@ export class PartsService {
           unit: part.unit,
           stockBefore,
           stockAfter,
+          quantityOnHand: stockAfter,
           isLowStock: stockAfter <= part.minimumStock,
         },
         targetAsset: {
@@ -308,7 +468,6 @@ export class PartsService {
         },
       };
     } catch (error) {
-      // Rollback toàn bộ nếu có bất kỳ lỗi nào xảy ra
       await queryRunner.rollbackTransaction();
       throw error;
     } finally {
