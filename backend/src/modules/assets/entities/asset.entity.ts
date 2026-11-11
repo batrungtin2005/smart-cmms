@@ -11,7 +11,6 @@ import { Location } from '../../locations/entities/location.entity';
 import { AssetHistory } from '../../history/entities/asset-history.entity';
 import { AssetPartBom } from '../../parts/entities/asset-part-bom.entity';
 import { WorkOrder } from '../../work-orders/entities/work-order.entity';
-
 import { AssetStatus, AssetCriticality } from '../enums/asset.enums';
 export { AssetStatus, AssetCriticality };
 
@@ -49,6 +48,7 @@ export class Asset extends AppBaseEntity {
   @Column({
     type: 'enum',
     enum: AssetStatus,
+    enumName: 'asset_status_enum',
     default: AssetStatus.OPERATIONAL,
   })
   status: AssetStatus;
@@ -56,6 +56,7 @@ export class Asset extends AppBaseEntity {
   @Column({
     type: 'enum',
     enum: AssetCriticality,
+    enumName: 'asset_criticality_enum',
     default: AssetCriticality.MEDIUM,
   })
   criticality: AssetCriticality;

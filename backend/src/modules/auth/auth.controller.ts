@@ -70,7 +70,7 @@ export class AuthController {
 
   @Get('users')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'MAINTENANCE_MANAGER')
+  @Roles('ADMIN', 'MANAGER')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Get list of all users (Admin & Manager)' })
   @ApiResponse({ status: 200, description: 'List of users retrieved' })

@@ -7,12 +7,12 @@ export class Role {
   id: number;
 
   @Column({ unique: true, length: 50 })
-  name: string; // 'ADMIN', 'MAINTENANCE_MANAGER', 'TECHNICIAN'
+  name: string; // 'ADMIN', 'MANAGER', 'TECHNICIAN', 'WAREHOUSE_KEEPER'
 
   @Column({ length: 255, nullable: true })
   description: string;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
   @OneToMany(() => User, (user) => user.role)

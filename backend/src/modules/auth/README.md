@@ -14,3 +14,8 @@
 - `auth.controller.ts`
 - `auth.service.ts`
 - `auth.module.ts`
+
+## Đồng bộ ngày 07/11/2026
+
+- `auth.controller.ts`: quyền xem danh sách người dùng đổi từ `MAINTENANCE_MANAGER` sang `MANAGER`, khớp vai trò seed trong SQL. ADMIN vẫn được truy cập; quyền tạo tài khoản vẫn chỉ ADMIN.
+- Chi tiết thay đổi User/Role và ánh xạ SQL được ghi trong `entities/README.md`.

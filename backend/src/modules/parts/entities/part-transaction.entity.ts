@@ -8,6 +8,7 @@ import {
 import { AppBaseEntity } from '../../../common/base.entity';
 import { Part } from './part.entity';
 import { User } from '../../auth/entities/user.entity';
+import { WorkOrder } from '../../work-orders/entities/work-order.entity';
 
 export enum TransactionType {
   IMPORT = 'IMPORT',         // Nhập kho vật tư
@@ -31,10 +32,15 @@ export class PartTransaction extends AppBaseEntity {
   @Column({ name: 'work_order_id', type: 'uuid', nullable: true })
   workOrderId: string | null;
 
+  @ManyToOne(() => WorkOrder, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'work_order_id' })
+  workOrder: WorkOrder | null;
+
   @Column({
     name: 'transaction_type',
     type: 'enum',
     enum: TransactionType,
+    enumName: 'transaction_type_enum',
   })
   transactionType: TransactionType;
 

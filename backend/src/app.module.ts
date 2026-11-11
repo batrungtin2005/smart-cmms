@@ -10,6 +10,9 @@ import { PartTransactionModule } from './modules/parts/part-transaction.module';
 import { HistoryModule } from './modules/history/history.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { RedisModule } from './common/redis/redis.module';
+import { WorkOrder } from './modules/work-orders/entities/work-order.entity';
+import { WorkOrderPart } from './modules/work-orders/entities/work-order-part.entity';
+import { MaintenanceSchedule } from './modules/schedules/entities/maintenance-schedule.entity';
 
 @Module({
   imports: [
@@ -24,6 +27,9 @@ import { RedisModule } from './common/redis/redis.module';
 
     // Task scheduler for maintenance cron jobs
     ScheduleModule.forRoot(),
+
+    // Register entities referenced by existing modules, before their APIs are implemented.
+    TypeOrmModule.forFeature([WorkOrder, WorkOrderPart, MaintenanceSchedule]),
 
     // PostgreSQL connection via TypeORM
     TypeOrmModule.forRootAsync({
