@@ -7,7 +7,7 @@
 
 | File | Mô tả |
 |------|-------|
-| **`smart_cmms_db.sql`** | Schema khởi tạo chính: 14 bảng, 10 enum, index, trigger, constraint và seed 4 vai trò. Không phải migration nâng cấp database đã có bảng. |
+| **`smart_cmms_db.sql`** | Schema khởi tạo chính: 15 bảng, 10 enum, index, trigger, constraint và seed 4 vai trò. Không phải migration nâng cấp database đã có bảng. |
 | **`verify-schema.cjs`** | Kiểm tra SQL với entity đã build và các quy tắc dữ liệu trong schema riêng, luôn rollback. |
 
 ### Chạy schema:
@@ -115,3 +115,7 @@ Seed thực sự trong SQL hiện chỉ gồm 4 vai trò. Các mục seed 300 th
 - Seed trong `smart_cmms_db.sql` dùng `MAINTENANCE_MANAGER`, khớp AuthService và quyền trong AuthController.
 - `verify-schema.cjs` tra vai trò theo tên mới khi tạo user kiểm thử và kiểm tra cập nhật Role.
 - Không đổi ID vai trò, không tự chuyển tài khoản đang dùng vai trò cũ trong database. Không chạy lại toàn bộ schema để đổi tên role trên database đã có dữ liệu; cần xử lý dữ liệu riêng sau khi kiểm tra các role/tài khoản hiện có.
+
+## Lịch sử Work Order (13/11/2026)
+
+SQL khởi tạo bổ sung bảng thứ 15: work_order_status_history, khớp entity cùng tên. Database cũ dùng migration riêng `migrations/20261113_work_order_status_history.sql`; xem `migrations/README.md` để chạy bằng pgAdmin trước khi khởi động backend mới. Không thay đổi dữ liệu cũ và không backfill lịch sử chưa biết. Migration chưa tự động chạy trên database ứng dụng.
