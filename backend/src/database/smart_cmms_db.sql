@@ -81,7 +81,8 @@ DO $$ BEGIN
         'COMPLETED',    -- Kỹ thuật viên báo hoàn thành
         'CLOSED',       -- Quản lý nghiệm thu, đóng phiếu
         'CANCELLED',    -- Huỷ bỏ
-        'ON_HOLD'       -- Tạm hoãn
+        'ON_HOLD',      -- Tạm hoãn
+        'REWORK_REQUIRED' -- Nghiệm thu không đạt, cần sửa lại
     );
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
@@ -326,6 +327,8 @@ CREATE TABLE IF NOT EXISTS work_orders (
     -- Quản lý nhập thời điểm hỏng; KTV ghi thời điểm bắt đầu và hoàn thành.
     breakdown_time           TIMESTAMPTZ NULL,
     start_time               TIMESTAMPTZ NULL,
+    asset_status_at_start    asset_status_enum NULL,
+    operating_hours_at_failure NUMERIC(10, 2) NULL,
     completed_time           TIMESTAMPTZ NULL,
     actual_repair_time_hours  NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     -- Giờ dừng máy bao gồm cả thời gian chờ trước khi KTV bắt đầu sửa.
@@ -379,7 +382,7 @@ CREATE TABLE IF NOT EXISTS work_order_parts (
     subtotal      NUMERIC(12, 2) GENERATED ALWAYS AS (quantity_used * unit_price) STORED,
     notes         VARCHAR(255) NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_wo_part UNIQUE (work_order_id, part_id)
+    CONSTRAINT uq_wo_part_price UNIQUE (work_order_id, part_id, unit_price)
 );
 
 CREATE INDEX IF NOT EXISTS idx_wop_work_order ON work_order_parts(work_order_id);
@@ -448,14 +451,14 @@ CREATE TABLE IF NOT EXISTS asset_maintenance_history (
     actual_repair_time_hours NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
 
     -- Dữ liệu tính MTBF
-    operating_hours_at_failure    NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    operating_hours_at_failure    NUMERIC(10, 2) NULL DEFAULT 0.00,
     time_between_failures_hours   NUMERIC(10, 2) NULL,
     is_failure_counted            BOOLEAN        NOT NULL DEFAULT FALSE,
 
     -- Thông tin kỹ thuật & chi phí
     failure_cause  VARCHAR(255)          NULL,
     action_taken   TEXT                  NULL,
-    status_before  asset_status_enum     NOT NULL DEFAULT 'DOWN',
+    status_before  asset_status_enum     NULL DEFAULT 'DOWN',
     status_after   asset_status_enum     NOT NULL DEFAULT 'OPERATIONAL',
     parts_replaced JSONB                 NULL DEFAULT '[]'::jsonb,
     cost_parts     NUMERIC(12, 2)        NOT NULL DEFAULT 0.00,
@@ -629,4 +632,39 @@ CREATE TABLE IF NOT EXISTS work_order_status_history (
     CONSTRAINT uq_wo_history_sequence UNIQUE (work_order_id, sequence),
     CHECK (to_status NOT IN ('ON_HOLD', 'CANCELLED') OR
            (reason IS NOT NULL AND length(trim(reason)) > 0))
+);
+
+-- Material requests and warehouse issue workflow.
+DO $$ BEGIN
+    CREATE TYPE material_request_status_enum AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+CREATE TABLE IF NOT EXISTS material_requests (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    work_order_id UUID NOT NULL REFERENCES work_orders(id) ON DELETE RESTRICT,
+    requested_by_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    status material_request_status_enum NOT NULL DEFAULT 'PENDING',
+    notes TEXT,
+    resolved_by_id UUID REFERENCES users(id) ON DELETE RESTRICT,
+    resolved_at TIMESTAMPTZ,
+    resolution_reason TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK ((status = 'PENDING' AND resolved_by_id IS NULL AND resolved_at IS NULL)
+        OR (status <> 'PENDING' AND resolved_by_id IS NOT NULL AND resolved_at IS NOT NULL)),
+    CHECK (status NOT IN ('REJECTED', 'CANCELLED') OR
+        (resolution_reason IS NOT NULL AND length(trim(resolution_reason)) > 0))
+);
+CREATE INDEX IF NOT EXISTS idx_material_requests_work_order ON material_requests(work_order_id);
+CREATE INDEX IF NOT EXISTS idx_material_requests_status ON material_requests(status);
+CREATE TABLE IF NOT EXISTS material_request_items (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    request_id UUID NOT NULL REFERENCES material_requests(id) ON DELETE RESTRICT,
+    part_id UUID NOT NULL REFERENCES parts(id) ON DELETE RESTRICT,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    unit_price NUMERIC(12,2),
+    transaction_id UUID UNIQUE REFERENCES part_transactions(id) ON DELETE RESTRICT,
+    CONSTRAINT uq_material_request_part UNIQUE (request_id, part_id),
+    CHECK ((unit_price IS NULL AND transaction_id IS NULL) OR
+           (unit_price IS NOT NULL AND unit_price >= 0 AND transaction_id IS NOT NULL))
 );

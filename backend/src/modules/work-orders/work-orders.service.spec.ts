@@ -130,6 +130,7 @@ describe("Work Order input and business rules", () => {
     WorkOrderStatus.COMPLETED,
     WorkOrderStatus.CLOSED,
     WorkOrderStatus.CANCELLED,
+    WorkOrderStatus.REWORK_REQUIRED,
   ])("rejects assignment of %s orders", async (status) => {
     const lockedManager = { findOne: jest.fn().mockResolvedValue({ status }) };
     transaction.mockImplementation((callback) => callback(lockedManager));

@@ -7,7 +7,7 @@
 
 | File | Mô tả |
 |------|-------|
-| **`smart_cmms_db.sql`** | Schema khởi tạo chính: 15 bảng, 10 enum, index, trigger, constraint và seed 4 vai trò. Không phải migration nâng cấp database đã có bảng. |
+| **`smart_cmms_db.sql`** | Schema khởi tạo chính: 17 bảng, 11 enum, index, trigger, constraint và seed 4 vai trò. Không phải migration nâng cấp database đã có bảng. |
 | **`verify-schema.cjs`** | Kiểm tra SQL với entity đã build và các quy tắc dữ liệu trong schema riêng, luôn rollback. |
 
 ### Chạy schema:
@@ -119,3 +119,11 @@ Seed thực sự trong SQL hiện chỉ gồm 4 vai trò. Các mục seed 300 th
 ## Lịch sử Work Order (13/11/2026)
 
 SQL khởi tạo bổ sung bảng thứ 15: work_order_status_history, khớp entity cùng tên. Database cũ dùng migration riêng `migrations/20261113_work_order_status_history.sql`; xem `migrations/README.md` để chạy bằng pgAdmin trước khi khởi động backend mới. Không thay đổi dữ liệu cũ và không backfill lịch sử chưa biết. Migration chưa tự động chạy trên database ứng dụng.
+
+## Migration yêu cầu vật tư
+
+Schema khởi tạo hiện có 17 bảng và 11 enum: thêm material_requests/material_request_items và material_request_status_enum. work_order_parts dùng unique theo phiếu/vật tư/đơn giá để lưu chi phí từng mức giá. Database cũ chạy migrations/20261113_material_requests.sql, giữ nguyên dữ liệu cũ và không tự sinh yêu cầu từ giao dịch trước đây. Chưa áp dụng vào database ứng dụng; kiểm thử dùng schema riêng. Xem migrations/README.md và work-orders/MATERIAL_REQUESTS.md.
+
+## Hoàn thành và nghiệm thu
+
+SQL bổ sung REWORK_REQUIRED vào work_order_status_enum, hai snapshot nullable trên work_orders (asset_status_at_start, operating_hours_at_failure), và cho phép null ở asset_maintenance_history.status_before/operating_hours_at_failure. Database cũ dùng migrations/20261113_work_order_completion.sql sau hai migration Work Order trước đó. Không backfill lịch sử/counter cho phiếu cũ và chưa áp dụng vào schema ứng dụng. Tổng số bảng/loại enum không đổi.
