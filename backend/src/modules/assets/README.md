@@ -39,3 +39,7 @@ assets/
 - API `GET /api/v1/assets/code/:code` phải đặt **trước** route `GET /api/v1/assets/:id` trong controller để NestJS không nhầm `code` với `id`.
 - `qr_code_url` sinh tự động khi tạo mới, có thể dùng thư viện `qrcode` hoặc lưu URL tĩnh theo quy ước `"/qr/{asset_code}.png"`.
 - Khi `status` chuyển sang `MAINTENANCE` hoặc `DOWN`, nên emit event để module Work Orders có thể xử lý nếu cần.
+
+## Tích hợp vòng đời Work Order
+
+AssetsService.updateStatus/update khóa Asset trong transaction và kiểm tra phiếu liên quan trước khi cho đặt OPERATIONAL: chặn khi có IN_PROGRESS/ON_HOLD/COMPLETED/REWORK_REQUIRED hoặc sự cố OPEN/ASSIGNED. update chỉ UPDATE các trường DTO, remove chỉ cập nhật isActive, tránh save entity cũ ghi đè trạng thái/thống kê do Work Order vừa thay đổi. Vòng đời Work Order chịu trách nhiệm tự chuyển DOWN/MAINTENANCE/OPERATIONAL và giữ nguyên inactive/DECOMMISSIONED; quy tắc đầy đủ tại work-orders/COMPLETION.md. Kiểm thử tích hợp trong WorkOrdersModule kiểm tra không đặt OPERATIONAL thủ công vượt nghiệm thu và đổi tên không ghi đè trạng thái.

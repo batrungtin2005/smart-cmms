@@ -16,3 +16,11 @@ DTO hoàn thành và dùng vật tư thuộc bước sau; DTO chuyển trạng t
 ## ChangeWorkOrderStatusDto — bước 3
 
 Chấp nhận status IN_PROGRESS / ON_HOLD / CANCELLED. reason được trim, tối đa 1000 ký tự; bắt buộc khi ON_HOLD hoặc CANCELLED, không nhận null/rỗng nếu có gửi. Các trường timestamp/actor không được nhận từ client. ValidationPipe từ chối trường ngoài DTO. Service kiểm tra quyền, người được giao và trạng thái hiện tại dưới khóa database.
+
+## DTO yêu cầu vật tư
+
+material-request.dto.ts thêm CreateMaterialRequestDto (items 1–50 dòng, partId UUID không lặp, quantity nguyên 1–1.000.000, notes tùy chọn tối đa 1.000 ký tự), MaterialRequestReasonDto (reason trim bắt buộc cho hủy/từ chối) và QueryMaterialRequestsDto (page/limit/status/workOrderId). Không nhận giá, tồn kho, người gửi hay người duyệt từ client. ValidateNested bảo vệ từng dòng; API dùng ValidationPipe hiện có để từ chối trường giả mạo. Chưa có DTO hoàn thành phiếu.
+
+## Hoàn thành và nghiệm thu
+
+CompleteWorkOrderDto bắt buộc rootCause (trim, tối đa 255) và solution (trim, tối đa 10.000), completionNotes tùy chọn. Không nhận lại vật tư, chi phí hoặc timestamp. VerifyWorkOrderDto bắt buộc decision ACCEPT/REJECT và verificationNotes trim không rỗng tối đa 1.000 ký tự. Chuyển REWORK_REQUIRED chỉ qua quyết định REJECT; ChangeWorkOrderStatusDto vẫn chỉ nhận IN_PROGRESS/ON_HOLD/CANCELLED và cho KTV dùng IN_PROGRESS để bắt đầu sửa lại. QueryWorkOrdersDto dùng enum mới nên có thể lọc REWORK_REQUIRED.

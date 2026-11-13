@@ -1,3 +1,4 @@
+import { WorkOrder } from '../work-orders/entities/work-order.entity';
 import {
   Injectable,
   NotFoundException,
@@ -159,8 +160,9 @@ export class PartsService {
       throw new NotFoundException(`Không tìm thấy phụ tùng với ID: ${id}`);
     }
 
-    Object.assign(part, dto);
-    return this.partRepo.save(part);
+    // Update only catalog fields; do not overwrite stock changed by a concurrent issue.
+    await this.partRepo.update(id, dto);
+    return this.partRepo.findOneByOrFail({ id });
   }
 
   /**
@@ -172,8 +174,7 @@ export class PartsService {
       throw new NotFoundException(`Không tìm thấy phụ tùng với ID: ${id}`);
     }
 
-    part.isActive = false;
-    await this.partRepo.save(part);
+    await this.partRepo.update(id, { isActive: false });
 
     return {
       success: true,
@@ -277,13 +278,20 @@ export class PartsService {
 
   // ================= XUẤT / NHẬP KHO VỚI PESSIMISTIC LOCK CHỐNG TỒN ÂM =================
   async adjustStock(partId: string, dto: AdjustStockDto): Promise<PartTransaction> {
+    if (dto.workOrderId) {
+      throw new BadRequestException('Use the material-request approval API to issue parts for a Work Order');
+    }
+    if (!Number.isInteger(dto.quantity) || dto.quantity < 1 || dto.quantity > 1000000) {
+      throw new BadRequestException('Quantity must be an integer between 1 and 1000000');
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
       const part = await queryRunner.manager.findOne(Part, {
-        where: { id: partId },
+        where: { id: partId, isActive: true },
         lock: { mode: 'pessimistic_write' },
       });
 
@@ -337,6 +345,13 @@ export class PartsService {
 
   // ================= XUẤT PHỤ TÙNG SỬA CHỮA CHO TÀI SẢN (GIAO DỊCH ACID) =================
   async issuePartToAsset(dto: IssuePartToAssetDto) {
+    if (dto.workOrderId) {
+      throw new BadRequestException('Use the material-request approval API to issue parts for a Work Order');
+    }
+    if (!Number.isInteger(dto.quantity) || dto.quantity < 1 || dto.quantity > 1000000) {
+      throw new BadRequestException('Quantity must be an integer between 1 and 1000000');
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -360,11 +375,17 @@ export class PartsService {
 
       const asset = await queryRunner.manager.findOne(Asset, {
         where: { id: dto.assetId, isActive: true },
+        lock: { mode: 'pessimistic_write' },
       });
 
       if (!asset) {
         throw new NotFoundException(`Không tìm thấy tài sản / thiết bị với ID: ${dto.assetId}`);
       }
+
+      const blockingWork = await queryRunner.manager.getRepository(WorkOrder).createQueryBuilder('wo')
+        .where('wo.assetId = :assetId', { assetId: asset.id })
+        .andWhere("wo.status NOT IN ('CLOSED', 'CANCELLED')").getExists();
+      if (blockingWork) throw new ConflictException('Use the material request workflow while this asset has an open Work Order');
 
       const stockAfter = stockBefore - dto.quantity;
       part.currentStock = stockAfter;
@@ -476,10 +497,10 @@ export class PartsService {
   }
 
   async getTransactions(partId: string): Promise<PartTransaction[]> {
-    return this.txRepo.find({
-      where: { partId },
-      relations: ['performedBy'],
-      order: { createdAt: 'DESC' },
-    });
+    return this.txRepo.createQueryBuilder('tx')
+      .leftJoin('tx.performedBy', 'actor')
+      .addSelect(['actor.id', 'actor.username', 'actor.fullName'])
+      .where('tx.partId = :partId', { partId })
+      .orderBy('tx.createdAt', 'DESC').getMany();
   }
 }

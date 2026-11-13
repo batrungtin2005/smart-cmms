@@ -96,8 +96,9 @@ export class AssetHistory extends AppBaseEntity {
     precision: 10,
     scale: 2,
     default: 0,
+    nullable: true,
   })
-  operatingHoursAtFailure: number;
+  operatingHoursAtFailure: number | null;
 
   // Thời gian máy chạy an toàn giữa 2 lần hỏng liên tiếp (Time Between Failures - TBF)
   @Column({
@@ -126,8 +127,9 @@ export class AssetHistory extends AppBaseEntity {
     enum: AssetStatus,
     enumName: 'asset_status_enum',
     default: AssetStatus.DOWN,
+    nullable: true,
   })
-  statusBefore: AssetStatus;
+  statusBefore: AssetStatus | null;
 
   @Column({
     type: 'enum',

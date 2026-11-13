@@ -147,3 +147,11 @@ Service khóa hàng phiếu và ghi trạng thái + lịch sử trong một tran
 **Database cũ phải chạy `src/database/migrations/20261113_work_order_status_history.sql` trước khi dùng backend mới.** Không chạy lại toàn bộ SQL khởi tạo. Entity lịch sử được đăng ký trong WorkOrdersModule; synchronize vẫn tắt.
 
 Integration test bổ sung: phân quyền, ma trận chuyển, bắt buộc lý do, chống giả mạo startTime, giữ startTime khi tiếp tục, hai yêu cầu đồng thời và rollback khi ghi lịch sử lỗi. Test chỉ tác động schema ngẫu nhiên riêng.
+
+## Luồng vật tư được cập nhật
+
+Đã triển khai MaterialRequestsController/Service trong WorkOrdersModule. KTV gửi yêu cầu; thủ kho duyệt và xuất kho nguyên tử. Phiếu lấy vật tư/chi phí từ lần cấp; chưa có API hoàn thành. Xem [MATERIAL_REQUESTS.md](MATERIAL_REQUESTS.md) để biết đầy đủ quy trình, payload, phân quyền, khóa giao dịch, thay đổi giá và giới hạn. Đây là luồng thay cho xuất vật tư trực tiếp theo Work Order trong phần kế hoạch cũ.
+
+## Hoàn thành, nghiệm thu, cập nhật thiết bị
+
+Đã triển khai PATCH :id/complete và :id/verify, helper repair-time.ts, unit/integration tests. Nghiệm thu không đạt dùng trạng thái mới REWORK_REQUIRED (Cần sửa lại), tách khỏi ON_HOLD. Xem [COMPLETION.md](COMPLETION.md) để biết payload, quyền, cách tính giờ, xử lý nhiều phiếu trên cùng thiết bị, lịch sử, dữ liệu cũ và migration. Các ghi chú kế hoạch “chưa có API hoàn thành” ở các phần trước đã được thay thế bằng tính năng này.

@@ -17,6 +17,8 @@ import { RolesGuard } from "../../common/guards/roles.guard";
 import { AssignWorkOrderDto } from "./dto/assign-work-order.dto";
 import { ChangeWorkOrderStatusDto } from "./dto/change-work-order-status.dto";
 import { CreateWorkOrderDto } from "./dto/create-work-order.dto";
+import { CompleteWorkOrderDto } from "./dto/complete-work-order.dto";
+import { VerifyWorkOrderDto } from "./dto/verify-work-order.dto";
 import {
   MyWorkOrdersQueryDto,
   QueryWorkOrdersDto,
@@ -29,6 +31,28 @@ import { WorkOrderActor, WorkOrdersService } from "./work-orders.service";
 @Controller("work-orders")
 export class WorkOrdersController {
   constructor(private readonly workOrdersService: WorkOrdersService) {}
+
+  @Patch(":id/complete")
+  @Roles("TECHNICIAN")
+  @ApiOperation({ summary: "KTV hoàn thành phiếu; không nhập lại vật tư" })
+  complete(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: CompleteWorkOrderDto,
+    @CurrentUser() actor: WorkOrderActor,
+  ) {
+    return this.workOrdersService.complete(id, dto, actor);
+  }
+
+  @Patch(":id/verify")
+  @Roles("ADMIN", "MAINTENANCE_MANAGER")
+  @ApiOperation({ summary: "Nghiệm thu đạt hoặc trả phiếu để sửa lại" })
+  verify(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: VerifyWorkOrderDto,
+    @CurrentUser() actor: WorkOrderActor,
+  ) {
+    return this.workOrdersService.verify(id, dto, actor);
+  }
 
   @Patch(":id/status")
   @Roles("ADMIN", "MAINTENANCE_MANAGER", "TECHNICIAN")
