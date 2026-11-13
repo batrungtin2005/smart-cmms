@@ -38,4 +38,8 @@ SQL được đổi theo tên cột backend: `assigned_technician_id`, `start_ti
 - Khai báo `enumName` là `work_order_type_enum`, `work_order_status_enum`, `work_order_priority_enum`, đúng tên và thứ tự giá trị SQL.
 - `WorkOrderPart` ánh xạ bảng `work_order_parts`: quan hệ tới WO (`CASCADE`) và Part (`RESTRICT`), cặp WO/Part unique, `quantity_used > 0`, `subtotal` GENERATED STORED bằng số lượng × đơn giá.
 - WorkOrderPart chỉ có `created_at` theo SQL, không kế thừa BaseEntity vì BaseEntity thêm `updated_at`.
-- Ba entity WorkOrder, WorkOrderPart, MaintenanceSchedule được đăng ký ở AppModule. Đây là tầng dữ liệu, chưa phải API quản lý phiếu hay cron.
+- Đăng ký entity hiện chuyển sang WorkOrdersModule, gồm thêm lịch sử ở bước 3 bên dưới. API quản lý phiếu đã triển khai; cron thuộc bước sau.
+
+## Cập nhật bước 3 (13/11/2026)
+
+WorkOrdersModule hiện đăng ký WorkOrder, WorkOrderPart, MaintenanceSchedule và WorkOrderStatusHistory (thay cho đăng ký trực tiếp tại AppModule). Entity mới ánh xạ bảng work_order_status_history: UUID, workOrderId CASCADE, sequence số nguyên dương unique theo phiếu, fromStatus nullable/toStatus dùng chung work_order_status_enum, performedById RESTRICT, assignedTechnicianId SET NULL, reason và createdAt. Không có updatedAt vì đây là bản ghi lịch sử. SQL CHECK bắt buộc lý do khi tạm dừng/hủy. Service quản lý thứ tự trong transaction khóa phiếu; không khai báo quan hệ ngược không cần thiết trên User/WorkOrder.
