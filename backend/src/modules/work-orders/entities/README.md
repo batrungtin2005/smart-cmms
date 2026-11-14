@@ -38,4 +38,19 @@ SQL được đổi theo tên cột backend: `assigned_technician_id`, `start_ti
 - Khai báo `enumName` là `work_order_type_enum`, `work_order_status_enum`, `work_order_priority_enum`, đúng tên và thứ tự giá trị SQL.
 - `WorkOrderPart` ánh xạ bảng `work_order_parts`: quan hệ tới WO (`CASCADE`) và Part (`RESTRICT`), cặp WO/Part unique, `quantity_used > 0`, `subtotal` GENERATED STORED bằng số lượng × đơn giá.
 - WorkOrderPart chỉ có `created_at` theo SQL, không kế thừa BaseEntity vì BaseEntity thêm `updated_at`.
-- Ba entity WorkOrder, WorkOrderPart, MaintenanceSchedule được đăng ký ở AppModule. Đây là tầng dữ liệu, chưa phải API quản lý phiếu hay cron.
+- Đăng ký entity hiện chuyển sang WorkOrdersModule, gồm thêm lịch sử ở bước 3 bên dưới. API quản lý phiếu đã triển khai; cron thuộc bước sau.
+
+## Cập nhật bước 3 (13/11/2026)
+
+WorkOrdersModule hiện đăng ký WorkOrder, WorkOrderPart, MaintenanceSchedule và WorkOrderStatusHistory (thay cho đăng ký trực tiếp tại AppModule). Entity mới ánh xạ bảng work_order_status_history: UUID, workOrderId CASCADE, sequence số nguyên dương unique theo phiếu, fromStatus nullable/toStatus dùng chung work_order_status_enum, performedById RESTRICT, assignedTechnicianId SET NULL, reason và createdAt. Không có updatedAt vì đây là bản ghi lịch sử. SQL CHECK bắt buộc lý do khi tạm dừng/hủy. Service quản lý thứ tự trong transaction khóa phiếu; không khai báo quan hệ ngược không cần thiết trên User/WorkOrder.
+
+## Entity yêu cầu vật tư
+
+- MaterialRequest ánh xạ material_requests, dùng AppBaseEntity (UUID/createdAt/updatedAt); enum material_request_status_enum gồm PENDING, APPROVED, REJECTED, CANCELLED. Quan hệ tới WorkOrder/người gửi/người xử lý dùng RESTRICT để giữ chứng từ.
+- MaterialRequestItem ánh xạ material_request_items, không có timestamp riêng; unique requestId/partId, quantity > 0. Đơn giá nullable và giao dịch kho nullable unique chỉ điền lúc xuất; các quan hệ RESTRICT.
+- Cả hai được đăng ký bằng forFeature trong WorkOrdersModule, cùng Part/PartTransaction phục vụ cấp kho.
+- WorkOrderPart đổi unique từ uq_wo_part (phiếu/vật tư) sang uq_wo_part_price (phiếu/vật tư/đơn giá). Mỗi giá là một nhóm riêng, giữ chi phí chính xác qua nhiều lần cấp. Migration giữ nguyên dữ liệu cũ, chỉ thay constraint; SQL khởi tạo đã đồng bộ.
+
+## Snapshot và trạng thái sửa lại
+
+work-order.enums.ts thêm REWORK_REQUIRED cuối enum PostgreSQL để giữ thứ tự enum hiện có. WorkOrder thêm assetStatusAtStart (asset_status_enum nullable) và operatingHoursAtFailure (numeric 10,2 nullable). Snapshot lần bắt đầu và bộ đếm lúc tạo phiếu giúp AssetHistory không lấy dữ liệu đã thay đổi ở thời điểm nghiệm thu; phiếu cũ để null. Không thêm entity lịch sử mới: AssetHistory hiện có được đăng ký trong WorkOrdersModule và được ghi trong transaction nghiệm thu. Migration: 20261113_work_order_completion.sql.

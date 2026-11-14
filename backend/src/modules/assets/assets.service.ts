@@ -4,7 +4,8 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
+import { WorkOrder } from '../work-orders/entities/work-order.entity';
 import { Asset, AssetStatus, AssetCriticality } from './entities/asset.entity';
 import { AssetHistory } from '../history/entities/asset-history.entity';
 import { RedisService } from '../../common/redis/redis.service';
@@ -188,26 +189,39 @@ export class AssetsService {
   }
 
   // 5. CẬP NHẬT TRẠNG THÁI TÀI SẢN (OPERATIONAL, DOWN, MAINTENANCE, DECOMMISSIONED)
+  private async checkOperational(manager: EntityManager, assetId: string, status?: AssetStatus) {
+    if (status !== AssetStatus.OPERATIONAL) return;
+    const blocking = await manager.getRepository(WorkOrder).createQueryBuilder('wo')
+      .where('wo.assetId = :assetId', { assetId })
+      .andWhere("(wo.status IN ('IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'REWORK_REQUIRED') OR (wo.status IN ('OPEN', 'ASSIGNED') AND wo.type IN ('CORRECTIVE', 'EMERGENCY')))")
+      .getExists();
+    if (blocking) throw new ConflictException('Cannot restore operation while maintenance work orders are unresolved');
+  }
+
   async updateStatus(id: string, dto: UpdateAssetStatusDto): Promise<Asset> {
-    const asset = await this.findOne(id);
-    const oldStatus = asset.status;
-    asset.status = dto.status;
-
-    // Nếu chuyển sang trạng thái DOWN (hỏng hóc dừng máy), ghi nhận thời điểm sự cố
-    if (dto.status === AssetStatus.DOWN && oldStatus !== AssetStatus.DOWN) {
-      asset.lastFailureDate = new Date();
-    }
-
-    const saved = await this.assetRepo.save(asset);
+    const saved = await this.assetRepo.manager.transaction(async manager => {
+      const asset = await manager.findOne(Asset, { where: { id, isActive: true }, lock: { mode: 'pessimistic_write' } });
+      if (!asset) throw new NotFoundException('Asset not found');
+      await this.checkOperational(manager, id, dto.status);
+      await manager.update(Asset, id, {
+        status: dto.status,
+        ...(dto.status === AssetStatus.DOWN && asset.status !== AssetStatus.DOWN ? { lastFailureDate: new Date() } : {}),
+      });
+      return manager.findOneByOrFail(Asset, { id });
+    });
     await this.redisService.delByPattern('assets:*');
     return saved;
   }
 
   // 6. CẬP NHẬT THÔNG TIN THIẾT BỊ
   async update(id: string, dto: UpdateAssetDto): Promise<Asset> {
-    const asset = await this.findOne(id);
-    Object.assign(asset, dto);
-    const saved = await this.assetRepo.save(asset);
+    const saved = await this.assetRepo.manager.transaction(async manager => {
+      const asset = await manager.findOne(Asset, { where: { id, isActive: true }, lock: { mode: 'pessimistic_write' } });
+      if (!asset) throw new NotFoundException('Asset not found');
+      await this.checkOperational(manager, id, dto.status);
+      if (Object.keys(dto).length) await manager.update(Asset, id, dto);
+      return manager.findOneByOrFail(Asset, { id });
+    });
     await this.redisService.delByPattern('assets:*');
     return saved;
   }
@@ -215,8 +229,7 @@ export class AssetsService {
   // 7. VÔ HIỆU HÓA TÀI SẢN (SOFT DELETE)
   async remove(id: string) {
     const asset = await this.findOne(id);
-    asset.isActive = false;
-    await this.assetRepo.save(asset);
+    await this.assetRepo.update(id, { isActive: false });
     await this.redisService.delByPattern('assets:*');
     return {
       success: true,

@@ -1,3 +1,10 @@
+import { UseGuards } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { WorkOrderActor } from '../work-orders/work-orders.service';
 import {
   Controller,
   Get,
@@ -29,6 +36,9 @@ import {
 } from './dto/create-part.dto';
 
 @ApiTags('Parts & Inventory')
+@ApiBearerAuth('JWT-auth')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN', 'WAREHOUSE_KEEPER', 'MAINTENANCE_MANAGER', 'TECHNICIAN')
 @Controller('parts')
 export class PartsController {
   constructor(private readonly partsService: PartsService) {}
@@ -81,6 +91,7 @@ export class PartsController {
 
   // 5. ENDPOINT: TẠO MÃ PHỤ TÙNG MỚI
   @Post()
+  @Roles('ADMIN', 'WAREHOUSE_KEEPER')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Tạo mã phụ tùng mới trong kho' })
   @ApiResponse({ status: 201, description: 'Tạo mới thành công.' })
@@ -91,6 +102,7 @@ export class PartsController {
 
   // 6. ENDPOINT: CẬP NHẬT THÔNG TIN PHỤ TÙNG
   @Patch(':id')
+  @Roles('ADMIN', 'WAREHOUSE_KEEPER')
   @ApiOperation({ summary: 'Cập nhật thông tin phụ tùng, đơn giá, vị trí kệ hoặc ngưỡng an toàn' })
   @ApiParam({ name: 'id', description: 'UUID của phụ tùng' })
   @ApiResponse({ status: 200, description: 'Cập nhật thành công.' })
@@ -104,6 +116,7 @@ export class PartsController {
 
   // 7. ENDPOINT: VÔ HIỆU HÓA PHỤ TÙNG (XÓA MỀM)
   @Delete(':id')
+  @Roles('ADMIN', 'WAREHOUSE_KEEPER')
   @ApiOperation({ summary: 'Vô hiệu hóa phụ tùng (Soft Delete)' })
   @ApiParam({ name: 'id', description: 'UUID của phụ tùng' })
   @ApiResponse({ status: 200, description: 'Vô hiệu hóa thành công.' })
@@ -114,6 +127,7 @@ export class PartsController {
 
   // 8. ENDPOINT CỐT LÕI: XUẤT PHỤ TÙNG SỬA CHỮA CHO THIẾT BỊ (GIAO DỊCH ACID)
   @Post('issue-to-asset')
+  @Roles('ADMIN', 'WAREHOUSE_KEEPER')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Xuất phụ tùng ra sửa chữa cho một tài sản',
@@ -132,19 +146,21 @@ export class PartsController {
     status: 404,
     description: 'Không tìm thấy phụ tùng hoặc tài sản tương ứng.',
   })
-  issuePartToAsset(@Body() dto: IssuePartToAssetDto) {
-    return this.partsService.issuePartToAsset(dto);
+  issuePartToAsset(@Body() dto: IssuePartToAssetDto, @CurrentUser() actor: WorkOrderActor) {
+    return this.partsService.issuePartToAsset({ ...dto, performedById: actor.id });
   }
 
   // 9. ENDPOINT: ĐIỀU CHỈNH TỒN KHO (NHẬP / XUẤT / KIỂM KÊ)
   @Post(':id/adjust')
+  @Roles('ADMIN', 'WAREHOUSE_KEEPER')
   @ApiOperation({ summary: 'Điều chỉnh số lượng tồn kho (Nhập/Xuất/Kiểm kê)' })
   @ApiParam({ name: 'id', description: 'UUID của phụ tùng' })
   adjustStock(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AdjustStockDto,
+    @CurrentUser() actor: WorkOrderActor,
   ) {
-    return this.partsService.adjustStock(id, dto);
+    return this.partsService.adjustStock(id, { ...dto, performedById: actor.id });
   }
 
   // 10. ENDPOINT: XEM LỊCH SỬ XUẤT NHẬP CỦA PHỤ TÙNG
@@ -157,6 +173,7 @@ export class PartsController {
 
   // 11. ENDPOINT: THIẾT LẬP ĐỊNH MỨC PHỤ TÙNG (BOM) CHO MÁY
   @Post('bom')
+  @Roles('ADMIN', 'WAREHOUSE_KEEPER')
   @ApiOperation({ summary: 'Thiết lập định mức phụ tùng (BOM) cho thiết bị' })
   createBom(@Body() dto: CreateAssetPartBomDto) {
     return this.partsService.createBom(dto);

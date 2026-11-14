@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { AppBaseEntity } from '../../../common/base.entity';
 import { Asset } from '../../assets/entities/asset.entity';
+import { AssetStatus } from '../../assets/enums/asset.enums';
 import { User } from '../../auth/entities/user.entity';
 import { MaintenanceSchedule } from '../../schedules/entities/maintenance-schedule.entity';
 import { WorkOrderPriority, WorkOrderStatus, WorkOrderType } from './work-order.enums';
@@ -94,6 +95,12 @@ export class WorkOrder extends AppBaseEntity {
 
   @Column({ name: 'start_time', type: 'timestamptz', nullable: true })
   startTime: Date | null; // Thời điểm kỹ thuật viên bắt đầu sửa
+
+  @Column({ name: 'asset_status_at_start', type: 'enum', enum: AssetStatus, enumName: 'asset_status_enum', nullable: true })
+  assetStatusAtStart: AssetStatus | null;
+
+  @Column({ name: 'operating_hours_at_failure', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  operatingHoursAtFailure: number | null;
 
   @Column({ name: 'completed_time', type: 'timestamptz', nullable: true })
   completedTime: Date | null; // Thời điểm hoàn thành sửa chữa

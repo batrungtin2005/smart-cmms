@@ -6,6 +6,7 @@ export enum WorkOrderStatus {
   CLOSED = 'CLOSED',
   CANCELLED = 'CANCELLED',
   ON_HOLD = 'ON_HOLD',
+  REWORK_REQUIRED = 'REWORK_REQUIRED',
 }
 
 export enum WorkOrderType {

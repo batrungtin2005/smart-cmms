@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { WorkOrder } from '../work-orders/entities/work-order.entity';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -28,84 +29,99 @@ export class HistoryService {
 
   // Ghi nhật ký bảo trì / sửa chữa (được gọi từ WorkOrder hoặc ghi trực tiếp)
   async createHistoryLog(dto: CreateAssetHistoryDto): Promise<AssetHistory> {
-    const asset = await this.assetRepo.findOne({ where: { id: dto.assetId } });
-    if (!asset) {
-      throw new NotFoundException(`Không tìm thấy thiết bị với ID: ${dto.assetId}`);
+    if (dto.workOrderId) {
+      throw new BadRequestException('Work Order history is created through the verification API');
     }
+    return this.assetRepo.manager.transaction(async manager => {
+      const historyRepo = manager.getRepository(AssetHistory);
+      const assetRepo = manager.getRepository(Asset);
+      const asset = await assetRepo.findOne({ where: { id: dto.assetId }, lock: { mode: 'pessimistic_write' } });
+      if (!asset) {
+        throw new NotFoundException(`Không tìm thấy thiết bị với ID: ${dto.assetId}`);
+      }
 
-    // Tự động tính thời gian máy chạy giữa 2 lần hỏng (Time Between Failures - TBF)
-    let timeBetweenFailuresHours: number | null = null;
-    const isBreakdown =
-      dto.eventType === MaintenanceEventType.BREAKDOWN ||
-      dto.eventType === MaintenanceEventType.CORRECTIVE_REPAIR;
+      const blockingWork = await manager.getRepository(WorkOrder).createQueryBuilder('wo')
+        .where('wo.assetId = :assetId', { assetId: asset.id })
+        .andWhere("wo.status NOT IN ('CLOSED', 'CANCELLED')").getExists();
+      if (blockingWork) throw new ConflictException('Use Work Order verification while this asset has an open Work Order');
 
-    if (isBreakdown) {
-      // Tìm lần hỏng máy gần nhất trước đó
-      const lastFailureLog = await this.historyRepo.findOne({
-        where: {
-          assetId: dto.assetId,
-          isFailureCounted: true,
-        },
-        order: { createdAt: 'DESC' },
+      // Tự động tính thời gian máy chạy giữa 2 lần hỏng (Time Between Failures - TBF)
+      let timeBetweenFailuresHours: number | null = null;
+      const isBreakdown =
+        dto.eventType === MaintenanceEventType.BREAKDOWN ||
+        dto.eventType === MaintenanceEventType.CORRECTIVE_REPAIR;
+
+      if (isBreakdown) {
+        // Tìm lần hỏng máy gần nhất trước đó
+        const lastFailureLog = await historyRepo.findOne({
+          where: {
+            assetId: dto.assetId,
+            isFailureCounted: true,
+          },
+          order: { createdAt: 'DESC' },
+        });
+
+        const currentOperatingHours =
+          dto.operatingHoursAtFailure || Number(asset.operatingHours);
+
+        if (lastFailureLog) {
+          const lastOpHours = Number(lastFailureLog.operatingHoursAtFailure || 0);
+          timeBetweenFailuresHours = Math.max(0, currentOperatingHours - lastOpHours);
+        } else {
+          // Lần hỏng đầu tiên: TBF chính là số giờ đã chạy từ khi lắp đặt
+          timeBetweenFailuresHours = currentOperatingHours;
+        }
+      }
+
+      // Tự động tính thời gian sửa chữa và downtime nếu có truyền timestamp
+      let calculatedRepairTime = dto.actualRepairTimeHours || 0;
+      if (!calculatedRepairTime && dto.repairStartTime && dto.repairEndTime) {
+        const start = new Date(dto.repairStartTime).getTime();
+        const end = new Date(dto.repairEndTime).getTime();
+        calculatedRepairTime = Number(((end - start) / (1000 * 60 * 60)).toFixed(2));
+      }
+
+      let calculatedDowntime = dto.downtimeHours || 0;
+      if (!calculatedDowntime && dto.breakdownTime && dto.repairEndTime) {
+        const bStart = new Date(dto.breakdownTime).getTime();
+        const rEnd = new Date(dto.repairEndTime).getTime();
+        calculatedDowntime = Number(((rEnd - bStart) / (1000 * 60 * 60)).toFixed(2));
+      }
+
+      const historyLog = historyRepo.create({
+        ...dto,
+        actualRepairTimeHours: calculatedRepairTime,
+        downtimeHours: calculatedDowntime,
+        operatingHoursAtFailure:
+          dto.operatingHoursAtFailure || Number(asset.operatingHours),
+        isFailureCounted: isBreakdown,
+        timeBetweenFailuresHours,
       });
 
-      const currentOperatingHours =
-        dto.operatingHoursAtFailure || Number(asset.operatingHours);
+      const savedLog = await historyRepo.save(historyLog);
 
-      if (lastFailureLog) {
-        const lastOpHours = Number(lastFailureLog.operatingHoursAtFailure || 0);
-        timeBetweenFailuresHours = Math.max(0, currentOperatingHours - lastOpHours);
-      } else {
-        // Lần hỏng đầu tiên: TBF chính là số giờ đã chạy từ khi lắp đặt
-        timeBetweenFailuresHours = currentOperatingHours;
+      // Cập nhật lại thống kê trên bảng Asset nếu là sự cố hỏng hóc
+      if (isBreakdown) {
+        asset.totalFailures = (asset.totalFailures || 0) + 1;
+        asset.totalRepairTimeHours =
+          Number(asset.totalRepairTimeHours || 0) + Number(calculatedRepairTime);
+        asset.lastFailureDate = dto.breakdownTime || new Date();
+        asset.status = dto.statusAfter || AssetStatus.OPERATIONAL;
+
+        // Cập nhật chỉ số MTTR & MTBF lưu trữ
+        const failures = await historyRepo.find({ where: { assetId: asset.id, isFailureCounted: true } });
+        const repair = failures.reduce((sum, row) => sum + Number(row.actualRepairTimeHours), 0);
+        const metrics = { mttrHours: failures.length ? repair / failures.length : 0,
+          mtbfHours: failures.length ? Number(asset.operatingHours) / failures.length : Number(asset.operatingHours) };
+        asset.cachedMttrHours = metrics.mttrHours;
+        asset.cachedMtbfHours = metrics.mtbfHours;
+        asset.metricsLastUpdatedAt = new Date();
+
+        await assetRepo.save(asset);
       }
-    }
 
-    // Tự động tính thời gian sửa chữa và downtime nếu có truyền timestamp
-    let calculatedRepairTime = dto.actualRepairTimeHours || 0;
-    if (!calculatedRepairTime && dto.repairStartTime && dto.repairEndTime) {
-      const start = new Date(dto.repairStartTime).getTime();
-      const end = new Date(dto.repairEndTime).getTime();
-      calculatedRepairTime = Number(((end - start) / (1000 * 60 * 60)).toFixed(2));
-    }
-
-    let calculatedDowntime = dto.downtimeHours || 0;
-    if (!calculatedDowntime && dto.breakdownTime && dto.repairEndTime) {
-      const bStart = new Date(dto.breakdownTime).getTime();
-      const rEnd = new Date(dto.repairEndTime).getTime();
-      calculatedDowntime = Number(((rEnd - bStart) / (1000 * 60 * 60)).toFixed(2));
-    }
-
-    const historyLog = this.historyRepo.create({
-      ...dto,
-      actualRepairTimeHours: calculatedRepairTime,
-      downtimeHours: calculatedDowntime,
-      operatingHoursAtFailure:
-        dto.operatingHoursAtFailure || Number(asset.operatingHours),
-      isFailureCounted: isBreakdown,
-      timeBetweenFailuresHours,
+      return savedLog;
     });
-
-    const savedLog = await this.historyRepo.save(historyLog);
-
-    // Cập nhật lại thống kê trên bảng Asset nếu là sự cố hỏng hóc
-    if (isBreakdown) {
-      asset.totalFailures = (asset.totalFailures || 0) + 1;
-      asset.totalRepairTimeHours =
-        Number(asset.totalRepairTimeHours || 0) + Number(calculatedRepairTime);
-      asset.lastFailureDate = dto.breakdownTime || new Date();
-      asset.status = dto.statusAfter || AssetStatus.OPERATIONAL;
-
-      // Cập nhật chỉ số MTTR & MTBF lưu trữ
-      const metrics = await this.calculateMetricsForAsset(asset.id);
-      asset.cachedMttrHours = metrics.mttrHours;
-      asset.cachedMtbfHours = metrics.mtbfHours;
-      asset.metricsLastUpdatedAt = new Date();
-
-      await this.assetRepo.save(asset);
-    }
-
-    return savedLog;
   }
 
   // ================= TÍNH TOÁN CHỈ SỐ MTTR & MTBF CHUẨN XÁC =================
