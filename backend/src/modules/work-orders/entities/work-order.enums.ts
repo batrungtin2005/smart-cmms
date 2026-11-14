@@ -1,0 +1,24 @@
+export enum WorkOrderStatus {
+  OPEN = 'OPEN',
+  ASSIGNED = 'ASSIGNED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  CLOSED = 'CLOSED',
+  CANCELLED = 'CANCELLED',
+  ON_HOLD = 'ON_HOLD',
+  REWORK_REQUIRED = 'REWORK_REQUIRED',
+}
+
+export enum WorkOrderType {
+  CORRECTIVE = 'CORRECTIVE',
+  PREVENTIVE = 'PREVENTIVE',
+  INSPECTION = 'INSPECTION',
+  EMERGENCY = 'EMERGENCY',
+}
+
+export enum WorkOrderPriority {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  CRITICAL = 'CRITICAL',
+}

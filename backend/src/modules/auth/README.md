@@ -14,3 +14,12 @@
 - `auth.controller.ts`
 - `auth.service.ts`
 - `auth.module.ts`
+
+## Đồng bộ ngày 07/11/2026
+
+- `auth.controller.ts`: quyền xem danh sách người dùng dùng `MAINTENANCE_MANAGER`, khớp vai trò seed trong SQL và AuthService. ADMIN vẫn được truy cập; quyền tạo tài khoản vẫn chỉ ADMIN.
+- Chi tiết thay đổi User/Role và ánh xạ SQL được ghi trong `entities/README.md`.
+
+## Chốt tên vai trò ngày 11/11/2026
+
+Thống nhất `MAINTENANCE_MANAGER` theo quyết định mới. Đã cập nhật kiểm tra quyền GET /auth/users; cơ chế seed trong AuthService đã dùng tên này nên giữ nguyên. Tài khoản có role tên cũ cần được chuyển sang role chuẩn trong một bước xử lý dữ liệu riêng; thay đổi source này không tự sửa role hoặc JWT đã phát hành.

@@ -18,3 +18,15 @@
 - `parts.controller.ts`
 - `parts.service.ts`
 - `parts.module.ts`
+
+## Tích hợp yêu cầu vật tư SV03
+
+PartsController áp dụng JwtAuthGuard/RolesGuard: đọc cho TECHNICIAN/MAINTENANCE_MANAGER/WAREHOUSE_KEEPER/ADMIN; tạo/sửa/vô hiệu hóa danh mục, BOM, điều chỉnh và xuất kho chỉ WAREHOUSE_KEEPER/ADMIN. Client cần gửi Bearer token. API adjust/issue-to-asset không nhận Work Order để xuất thẳng nữa: service từ chối workOrderId, hướng sang material-requests/:id/approve. Xuất độc lập không gắn phiếu vẫn tồn tại. performedById của hai API lấy từ JWT; quantity phải nguyên dương trong giới hạn 1.000.000, phụ tùng phải hoạt động.
+
+update/remove dùng UPDATE các trường thay đổi, tránh save toàn entity làm ghi đè currentStock trong lúc duyệt cấp kho. getTransactions chỉ chọn id/username/fullName của người thực hiện, không trả passwordHash. Luồng cấp theo phiếu mới nằm ở work-orders/material-requests.service.ts, ghi EXPORT và chi phí trong một transaction, chưa kết luận thiết bị đã sửa xong.
+
+Integration tests tại work-orders/work-orders.integration.spec.ts nạp cả PartsModule để kiểm tra JWT, chặn KTV xuất trực tiếp, chặn bypass workOrderId và không lộ mật khẩu trong lịch sử giao dịch.
+
+## Bảo vệ trạng thái thiết bị khi nghiệm thu
+
+issuePartToAsset (xuất kho độc lập) khóa Asset và từ chối nếu thiết bị còn phiếu chưa CLOSED/CANCELLED. Cấp vật tư cho công việc đang mở phải qua MaterialRequestsService, không dùng API độc lập vốn tự ghi AssetHistory/đổi thiết bị sang OPERATIONAL. Lỗi trả 409 và rollback, không trừ kho. Test tích hợp xác nhận tồn kho giữ nguyên khi bị chặn.

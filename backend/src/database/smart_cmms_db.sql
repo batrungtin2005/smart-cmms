@@ -36,11 +36,6 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- BƯỚC 1: TẠO CÁC KIỂU DỮ LIỆU ENUM
 -- ================================================================================
 
--- Trạng thái người dùng
-DO $$ BEGIN
-    CREATE TYPE user_status_enum AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED');
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
 -- Trạng thái tài sản / thiết bị
 DO $$ BEGIN
     CREATE TYPE asset_status_enum AS ENUM (
@@ -86,7 +81,8 @@ DO $$ BEGIN
         'COMPLETED',    -- Kỹ thuật viên báo hoàn thành
         'CLOSED',       -- Quản lý nghiệm thu, đóng phiếu
         'CANCELLED',    -- Huỷ bỏ
-        'ON_HOLD'       -- Tạm hoãn
+        'ON_HOLD',      -- Tạm hoãn
+        'REWORK_REQUIRED' -- Nghiệm thu không đạt, cần sửa lại
     );
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
@@ -135,18 +131,16 @@ EXCEPTION WHEN duplicate_object THEN null; END $$;
 -- BẢNG 1: roles — Vai trò / nhóm quyền
 -- ================================================================================
 CREATE TABLE IF NOT EXISTS roles (
-    id          UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id          SERIAL       PRIMARY KEY,
     name        VARCHAR(50)  NOT NULL UNIQUE,
     description VARCHAR(255) NULL,
-    permissions JSONB        NOT NULL DEFAULT '[]'::jsonb,
-    created_at  TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Dữ liệu mặc định (4 vai trò)
 INSERT INTO roles (name, description) VALUES
     ('ADMIN',            'Quản trị viên hệ thống — toàn quyền')
-  , ('MANAGER',          'Quản lý xưởng — tạo/duyệt Work Order, xem báo cáo')
+  , ('MAINTENANCE_MANAGER',          'Quản lý xưởng — tạo/duyệt Work Order, xem báo cáo')
   , ('TECHNICIAN',       'Kỹ thuật viên — nhận và thực hiện phiếu công việc')
   , ('WAREHOUSE_KEEPER', 'Thủ kho — quản lý nhập xuất phụ tùng, kiểm soát tồn kho')
 ON CONFLICT (name) DO NOTHING;
@@ -156,22 +150,21 @@ ON CONFLICT (name) DO NOTHING;
 -- ================================================================================
 CREATE TABLE IF NOT EXISTS users (
     id            UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
-    role_id       UUID         NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
-    employee_code VARCHAR(50)  NULL UNIQUE,
-    full_name     VARCHAR(150) NOT NULL,
-    email         VARCHAR(150) NOT NULL UNIQUE,
+    role_id       INTEGER      NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+    username      VARCHAR(50)  NOT NULL UNIQUE,
+    full_name     VARCHAR(100) NOT NULL,
+    email         VARCHAR(100) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,           -- bcrypt hash
-    phone         VARCHAR(20)  NULL,
+    phone_number  VARCHAR(20)  NULL,
     avatar_url    VARCHAR(500) NULL,
-    status        user_status_enum NOT NULL DEFAULT 'ACTIVE',
-    last_login_at TIMESTAMPTZ  NULL,
+    is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_email   ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id);
-CREATE INDEX IF NOT EXISTS idx_users_status  ON users(status);
+CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active);
 
 -- ================================================================================
 -- BẢNG 3: locations — Vị trí nhà xưởng (cấu trúc cây)
@@ -319,7 +312,7 @@ CREATE TABLE IF NOT EXISTS work_orders (
     asset_id         UUID        NOT NULL REFERENCES assets(id) ON DELETE RESTRICT,
     schedule_id      UUID        NULL REFERENCES maintenance_schedules(id) ON DELETE SET NULL,
     created_by_id    UUID        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    assigned_to_id   UUID        NULL REFERENCES users(id) ON DELETE SET NULL,
+    assigned_technician_id UUID  NULL REFERENCES users(id) ON DELETE SET NULL,
 
     title            VARCHAR(255) NOT NULL,
     description      TEXT         NULL,
@@ -331,10 +324,24 @@ CREATE TABLE IF NOT EXISTS work_orders (
     scheduled_start_date  DATE NULL,
     scheduled_end_date    DATE NULL,
 
-    -- Thời gian thực tế (kỹ thuật viên điền khi COMPLETED)
-    actual_start_time     TIMESTAMPTZ    NULL,
-    actual_end_time       TIMESTAMPTZ    NULL,
-    actual_duration_hours NUMERIC(10, 2) NULL,
+    -- Quản lý nhập thời điểm hỏng; KTV ghi thời điểm bắt đầu và hoàn thành.
+    breakdown_time           TIMESTAMPTZ NULL,
+    start_time               TIMESTAMPTZ NULL,
+    asset_status_at_start    asset_status_enum NULL,
+    operating_hours_at_failure NUMERIC(10, 2) NULL,
+    completed_time           TIMESTAMPTZ NULL,
+    actual_repair_time_hours  NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    -- Giờ dừng máy bao gồm cả thời gian chờ trước khi KTV bắt đầu sửa.
+    -- Chưa đủ hai mốc thời gian hoặc phiếu không có sự cố: trả 0.
+    downtime_hours NUMERIC(10, 2) GENERATED ALWAYS AS (
+        CASE WHEN breakdown_time IS NULL OR completed_time IS NULL THEN 0
+        ELSE EXTRACT(EPOCH FROM (completed_time - breakdown_time)) / 3600 END
+    ) STORED NOT NULL,
+    root_cause TEXT NULL, -- KTV chọn nguyên nhân hoặc nhập tự do khi hoàn thành
+    solution   TEXT NULL, -- KTV nhập biện pháp xử lý khi hoàn thành
+    CONSTRAINT chk_wo_completion_after_breakdown CHECK (
+        completed_time IS NULL OR breakdown_time IS NULL OR completed_time >= breakdown_time
+    ),
 
     -- Chi phí
     estimated_cost    NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
@@ -359,7 +366,7 @@ CREATE INDEX IF NOT EXISTS idx_wo_code       ON work_orders(work_order_code);
 CREATE INDEX IF NOT EXISTS idx_wo_asset      ON work_orders(asset_id);
 CREATE INDEX IF NOT EXISTS idx_wo_status     ON work_orders(status);
 CREATE INDEX IF NOT EXISTS idx_wo_priority   ON work_orders(priority);
-CREATE INDEX IF NOT EXISTS idx_wo_assigned   ON work_orders(assigned_to_id);
+CREATE INDEX IF NOT EXISTS idx_wo_assigned   ON work_orders(assigned_technician_id);
 CREATE INDEX IF NOT EXISTS idx_wo_schedule   ON work_orders(schedule_id);
 CREATE INDEX IF NOT EXISTS idx_wo_created_at ON work_orders(created_at);
 
@@ -375,7 +382,7 @@ CREATE TABLE IF NOT EXISTS work_order_parts (
     subtotal      NUMERIC(12, 2) GENERATED ALWAYS AS (quantity_used * unit_price) STORED,
     notes         VARCHAR(255) NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_wo_part UNIQUE (work_order_id, part_id)
+    CONSTRAINT uq_wo_part_price UNIQUE (work_order_id, part_id, unit_price)
 );
 
 CREATE INDEX IF NOT EXISTS idx_wop_work_order ON work_order_parts(work_order_id);
@@ -444,14 +451,14 @@ CREATE TABLE IF NOT EXISTS asset_maintenance_history (
     actual_repair_time_hours NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
 
     -- Dữ liệu tính MTBF
-    operating_hours_at_failure    NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    operating_hours_at_failure    NUMERIC(10, 2) NULL DEFAULT 0.00,
     time_between_failures_hours   NUMERIC(10, 2) NULL,
     is_failure_counted            BOOLEAN        NOT NULL DEFAULT FALSE,
 
     -- Thông tin kỹ thuật & chi phí
     failure_cause  VARCHAR(255)          NULL,
     action_taken   TEXT                  NULL,
-    status_before  asset_status_enum     NOT NULL DEFAULT 'DOWN',
+    status_before  asset_status_enum     NULL DEFAULT 'DOWN',
     status_after   asset_status_enum     NOT NULL DEFAULT 'OPERATIONAL',
     parts_replaced JSONB                 NULL DEFAULT '[]'::jsonb,
     cost_parts     NUMERIC(12, 2)        NOT NULL DEFAULT 0.00,
@@ -562,7 +569,7 @@ DO $$
 DECLARE tbl TEXT;
 BEGIN
     FOREACH tbl IN ARRAY ARRAY[
-        'roles', 'users', 'locations', 'assets', 'parts',
+        'users', 'locations', 'assets', 'parts',
         'asset_part_boms', 'part_transactions', 'work_orders',
         'maintenance_schedules', 'asset_maintenance_history'
     ] LOOP
@@ -610,3 +617,54 @@ GROUP BY a.id, a.asset_code, a.name, a.operating_hours;
 -- END OF SCHEMA
 -- ================================================================================
 
+
+-- Work Order transition audit (SV03 step 3).
+CREATE TABLE IF NOT EXISTS work_order_status_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    work_order_id UUID NOT NULL REFERENCES work_orders(id) ON DELETE CASCADE,
+    sequence INTEGER NOT NULL CHECK (sequence > 0),
+    from_status work_order_status_enum,
+    to_status work_order_status_enum NOT NULL,
+    performed_by_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    assigned_technician_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    reason TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_wo_history_sequence UNIQUE (work_order_id, sequence),
+    CHECK (to_status NOT IN ('ON_HOLD', 'CANCELLED') OR
+           (reason IS NOT NULL AND length(trim(reason)) > 0))
+);
+
+-- Material requests and warehouse issue workflow.
+DO $$ BEGIN
+    CREATE TYPE material_request_status_enum AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+CREATE TABLE IF NOT EXISTS material_requests (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    work_order_id UUID NOT NULL REFERENCES work_orders(id) ON DELETE RESTRICT,
+    requested_by_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    status material_request_status_enum NOT NULL DEFAULT 'PENDING',
+    notes TEXT,
+    resolved_by_id UUID REFERENCES users(id) ON DELETE RESTRICT,
+    resolved_at TIMESTAMPTZ,
+    resolution_reason TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK ((status = 'PENDING' AND resolved_by_id IS NULL AND resolved_at IS NULL)
+        OR (status <> 'PENDING' AND resolved_by_id IS NOT NULL AND resolved_at IS NOT NULL)),
+    CHECK (status NOT IN ('REJECTED', 'CANCELLED') OR
+        (resolution_reason IS NOT NULL AND length(trim(resolution_reason)) > 0))
+);
+CREATE INDEX IF NOT EXISTS idx_material_requests_work_order ON material_requests(work_order_id);
+CREATE INDEX IF NOT EXISTS idx_material_requests_status ON material_requests(status);
+CREATE TABLE IF NOT EXISTS material_request_items (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    request_id UUID NOT NULL REFERENCES material_requests(id) ON DELETE RESTRICT,
+    part_id UUID NOT NULL REFERENCES parts(id) ON DELETE RESTRICT,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    unit_price NUMERIC(12,2),
+    transaction_id UUID UNIQUE REFERENCES part_transactions(id) ON DELETE RESTRICT,
+    CONSTRAINT uq_material_request_part UNIQUE (request_id, part_id),
+    CHECK ((unit_price IS NULL AND transaction_id IS NULL) OR
+           (unit_price IS NOT NULL AND unit_price >= 0 AND transaction_id IS NOT NULL))
+);

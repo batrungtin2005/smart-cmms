@@ -10,6 +10,7 @@ import { PartTransactionModule } from './modules/parts/part-transaction.module';
 import { HistoryModule } from './modules/history/history.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { RedisModule } from './common/redis/redis.module';
+import { WorkOrdersModule } from './modules/work-orders/work-orders.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { RedisModule } from './common/redis/redis.module';
     PartsModule,
     PartTransactionModule,
     HistoryModule,
+    WorkOrdersModule,
   ],
 })
 export class AppModule {}
