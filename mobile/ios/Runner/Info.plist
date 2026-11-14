@@ -26,6 +26,15 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Kết nối máy chủ Smart CMMS trong mạng nội bộ để nhận công việc và gửi kết quả bảo trì.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Quét mã QR trên tem thiết bị để tra cứu thông tin và lịch sử bảo trì.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
