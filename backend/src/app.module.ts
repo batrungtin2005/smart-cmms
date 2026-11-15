@@ -7,7 +7,7 @@ import { LocationsModule } from './modules/locations/locations.module';
 import { AssetsModule } from './modules/assets/assets.module';
 import { PartsModule } from './modules/parts/parts.module';
 import { PartTransactionModule } from './modules/parts/part-transaction.module';
-import { HistoryModule } from './modules/history/history.module';
+import { AssetHistoryModule } from './modules/history/history.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { RedisModule } from './common/redis/redis.module';
 import { WorkOrdersModule } from './modules/work-orders/work-orders.module';
@@ -51,7 +51,7 @@ import { WorkOrdersModule } from './modules/work-orders/work-orders.module';
     AssetsModule,
     PartsModule,
     PartTransactionModule,
-    HistoryModule,
+    AssetHistoryModule,
     WorkOrdersModule,
   ],
 })

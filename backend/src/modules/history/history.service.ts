@@ -106,7 +106,8 @@ export class HistoryService {
         asset.totalRepairTimeHours =
           Number(asset.totalRepairTimeHours || 0) + Number(calculatedRepairTime);
         asset.lastFailureDate = dto.breakdownTime || new Date();
-        asset.status = dto.statusAfter || AssetStatus.OPERATIONAL;
+        // RÀNG BUỘC KIẾN TRÚC: Module History CHỈ làm nhiệm vụ ghi nhận lịch sử,
+        // TUYỆT ĐỐI KHÔNG tự ý cập nhật hay thay đổi status của Asset.
 
         // Cập nhật chỉ số MTTR & MTBF lưu trữ
         const failures = await historyRepo.find({ where: { assetId: asset.id, isFailureCounted: true } });
@@ -122,6 +123,78 @@ export class HistoryService {
 
       return savedLog;
     });
+  }
+
+  /**
+   * Tự động ghi nhật ký từ các Domain Events (Bảo trì, Sửa chữa, Thay thế)
+   * RÀNG BUỘC CỐT LÕI: CHỈ ghi nhận lịch sử chi tiết, TUYỆT ĐỐI KHÔNG tự ý cập nhật status của Asset.
+   */
+  async recordEventHistory(dto: {
+    assetId: string;
+    workOrderId?: string | null;
+    eventType: MaintenanceEventType;
+    title: string;
+    description?: string;
+    performedById?: string | null;
+    partsReplaced?: Array<{
+      partId: string;
+      partCode: string;
+      partName: string;
+      quantity: number;
+      unitPrice: number;
+      totalPrice: number;
+    }>;
+    costParts?: number;
+    costLabor?: number;
+    totalCost?: number;
+    breakdownTime?: Date;
+    repairStartTime?: Date;
+    repairEndTime?: Date;
+    downtimeHours?: number;
+    actualRepairTimeHours?: number;
+    operatingHoursAtFailure?: number;
+    failureCause?: string;
+    actionTaken?: string;
+    isFailureCounted?: boolean;
+  }): Promise<AssetHistory> {
+    const asset = await this.assetRepo.findOne({ where: { id: dto.assetId } });
+    if (!asset) {
+      throw new NotFoundException(`Không tìm thấy thiết bị với ID: ${dto.assetId}`);
+    }
+
+    const historyRecord = this.historyRepo.create({
+      assetId: asset.id,
+      workOrderId: dto.workOrderId || null,
+      eventType: dto.eventType,
+      title: dto.title,
+      description: dto.description || null,
+      breakdownTime: dto.breakdownTime || null,
+      repairStartTime: dto.repairStartTime || null,
+      repairEndTime: dto.repairEndTime || null,
+      downtimeHours: dto.downtimeHours || 0,
+      actualRepairTimeHours: dto.actualRepairTimeHours || 0,
+      operatingHoursAtFailure:
+        dto.operatingHoursAtFailure !== undefined
+          ? dto.operatingHoursAtFailure
+          : Number(asset.operatingHours || 0),
+      isFailureCounted:
+        dto.isFailureCounted !== undefined
+          ? dto.isFailureCounted
+          : dto.eventType === MaintenanceEventType.BREAKDOWN,
+      failureCause: dto.failureCause || null,
+      actionTaken: dto.actionTaken || null,
+      statusBefore: asset.status,
+      statusAfter: asset.status, // Giữ nguyên trạng thái hiện tại của asset, TUYỆT ĐỐI KHÔNG ĐỔI
+      partsReplaced: dto.partsReplaced || [],
+      costParts: dto.costParts || 0,
+      costLabor: dto.costLabor || 0,
+      totalCost:
+        dto.totalCost ||
+        Number(dto.costParts || 0) + Number(dto.costLabor || 0),
+      performedById: dto.performedById || null,
+    });
+
+    return this.historyRepo.save(historyRecord);
   }
 
   // ================= TÍNH TOÁN CHỈ SỐ MTTR & MTBF CHUẨN XÁC =================
