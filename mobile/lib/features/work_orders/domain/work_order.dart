@@ -7,7 +7,8 @@ enum WorkOrderStatus {
   completed,
   closed,
   cancelled,
-  onHold
+  onHold,
+  reworkRequired
 }
 
 class WorkOrder {
@@ -26,25 +27,42 @@ class WorkOrder {
       this.startedAt,
       this.completedAt,
       this.completionNotes,
+      this.rootCause,
+      this.solution,
+      this.verificationNotes,
       this.actualHours = 0,
       this.parts = const []});
   final String id, code, title, assetId, assetCode, assetName, technicianId;
   final WorkOrderPriority priority;
   final WorkOrderStatus status;
-  final String? description, completionNotes;
+  final String? description,
+      completionNotes,
+      rootCause,
+      solution,
+      verificationNotes;
   final DateTime? scheduledEnd, startedAt, completedAt;
   final double actualHours;
   final List<UsedPart> parts;
   bool canStart(String userId) =>
-      technicianId == userId && status == WorkOrderStatus.assigned;
+      technicianId == userId &&
+      [
+        WorkOrderStatus.assigned,
+        WorkOrderStatus.onHold,
+        WorkOrderStatus.reworkRequired
+      ].contains(status);
   bool canComplete(String userId) =>
       technicianId == userId && status == WorkOrderStatus.inProgress;
+  bool canRequestMaterials(String userId) =>
+      technicianId == userId &&
+      [WorkOrderStatus.inProgress, WorkOrderStatus.onHold].contains(status);
 
   WorkOrder copyWith(
           {WorkOrderStatus? status,
           DateTime? startedAt,
           DateTime? completedAt,
           String? completionNotes,
+          String? rootCause,
+          String? solution,
           double? actualHours,
           List<UsedPart>? parts}) =>
       WorkOrder(
@@ -62,6 +80,9 @@ class WorkOrder {
         startedAt: startedAt ?? this.startedAt,
         completedAt: completedAt ?? this.completedAt,
         completionNotes: completionNotes ?? this.completionNotes,
+        rootCause: rootCause ?? this.rootCause,
+        solution: solution ?? this.solution,
+        verificationNotes: verificationNotes,
         actualHours: actualHours ?? this.actualHours,
         parts: parts ?? this.parts,
       );
@@ -97,30 +118,69 @@ class PartSelection {
 
 class CompletionDraft {
   const CompletionDraft(
-      {required this.notes, required this.actualHours, required this.parts});
-  final String notes;
-  final double actualHours;
-  final List<PartSelection> parts;
+      {required this.rootCause, required this.solution, this.notes = ''});
+  final String rootCause, solution, notes;
 
   void validate() {
-    if (notes.trim().isEmpty || notes.trim().length > 5000) {
-      throw const WorkOrderValidation(
-          'Nhập ghi chú xử lý từ 1 đến 5000 ký tự.');
+    if (rootCause.trim().isEmpty || rootCause.trim().length > 255) {
+      throw const WorkOrderValidation('Nhập nguyên nhân từ 1 đến 255 ký tự.');
     }
-    if (!actualHours.isFinite || actualHours <= 0 || actualHours > 999999.99) {
+    if (solution.trim().isEmpty || solution.trim().length > 10000) {
+      throw const WorkOrderValidation('Nhập cách xử lý từ 1 đến 10000 ký tự.');
+    }
+    if (notes.trim().length > 10000) {
+      throw const WorkOrderValidation('Ghi chú không vượt quá 10000 ký tự.');
+    }
+  }
+}
+
+class MaterialDraft {
+  const MaterialDraft({required this.parts, this.notes = ''});
+  final List<PartSelection> parts;
+  final String notes;
+  void validate() {
+    if (parts.isEmpty || parts.length > 50 || notes.trim().length > 1000) {
       throw const WorkOrderValidation(
-          'Thời gian thực hiện phải lớn hơn 0 và không vượt quá 999999,99 giờ.');
+          'Chọn 1–50 phụ tùng, ghi chú tối đa 1000 ký tự.');
     }
     final ids = <String>{};
     for (final usage in parts) {
       if (!ids.add(usage.part.id) ||
           usage.quantity <= 0 ||
-          usage.quantity > usage.part.stock) {
+          usage.quantity > 1000000) {
         throw const WorkOrderValidation(
-            'Số lượng phụ tùng phải là số nguyên dương, không trùng và không vượt tồn kho.');
+            'Số lượng phải từ 1 đến 1000000, không trùng phụ tùng.');
       }
     }
   }
+}
+
+enum MaterialStatus { pending, approved, rejected, cancelled }
+
+class MaterialRequest {
+  const MaterialRequest(
+      {required this.id,
+      required this.workOrderId,
+      required this.requestedById,
+      required this.status,
+      this.notes,
+      this.reason,
+      this.createdAt,
+      this.items = const []});
+  final String id, workOrderId, requestedById;
+  final MaterialStatus status;
+  final String? notes, reason;
+  final DateTime? createdAt;
+  final List<UsedPart> items;
+  MaterialRequest cancelled(String reason) => MaterialRequest(
+      id: id,
+      workOrderId: workOrderId,
+      requestedById: requestedById,
+      status: MaterialStatus.cancelled,
+      notes: notes,
+      reason: reason,
+      createdAt: createdAt,
+      items: items);
 }
 
 class WorkOrderValidation implements Exception {

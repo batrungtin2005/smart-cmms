@@ -3,8 +3,7 @@ import '../../auth/data/token_store.dart';
 import '../domain/work_order.dart';
 import '../domain/work_order_repository.dart';
 
-// Proposed contract is documented in mobile/docs/work_order_api_contract.md.
-// SV03 must confirm and implement it before live integration is accepted.
+// Matches SV03 APIs merged into develop at 63665f2 (13/11/2026).
 class ApiWorkOrderRepository implements WorkOrderRepository {
   const ApiWorkOrderRepository({required this.api, required this.tokens});
   final ApiClient api;
@@ -76,11 +75,31 @@ class ApiWorkOrderRepository implements WorkOrderRepository {
     final updated = _order(
         _map(await api.patch(
             'work-orders/${Uri.encodeComponent(order.id)}/status',
-            {'status': 'IN_PROGRESS', 'expectedStatus': 'ASSIGNED'},
+            {'status': 'IN_PROGRESS'},
             token: await _token())),
         technicianId);
     if (updated.id != order.id ||
         updated.status != WorkOrderStatus.inProgress) {
+      _invalid();
+    }
+    return updated;
+  }
+
+  @override
+  Future<WorkOrder> pause(
+      WorkOrder order, String reason, String technicianId) async {
+    _owner(order, technicianId);
+    _reason(reason);
+    if (!order.canComplete(technicianId)) {
+      throw const WorkOrderValidation('Chỉ tạm dừng công việc đang thực hiện.');
+    }
+    final updated = _order(
+        _map(await api.patch(
+            'work-orders/${Uri.encodeComponent(order.id)}/status',
+            {'status': 'ON_HOLD', 'reason': reason.trim()},
+            token: await _token())),
+        technicianId);
+    if (updated.id != order.id || updated.status != WorkOrderStatus.onHold) {
       _invalid();
     }
     return updated;
@@ -97,16 +116,11 @@ class ApiWorkOrderRepository implements WorkOrderRepository {
     draft.validate();
     final updated = _order(
         _map(await api.patch(
-            'work-orders/${Uri.encodeComponent(order.id)}/status',
+            'work-orders/${Uri.encodeComponent(order.id)}/complete',
             {
-              'status': 'COMPLETED',
-              'expectedStatus': 'IN_PROGRESS',
+              'rootCause': draft.rootCause.trim(),
+              'solution': draft.solution.trim(),
               'completionNotes': draft.notes.trim(),
-              'actualRepairTimeHours': draft.actualHours,
-              'parts': draft.parts
-                  .map((usage) =>
-                      {'partId': usage.part.id, 'quantityUsed': usage.quantity})
-                  .toList(),
             },
             token: await _token())),
         technicianId);
@@ -131,7 +145,126 @@ class ApiWorkOrderRepository implements WorkOrderRepository {
             code: _string(json, 'partCode'),
             name: _string(json, 'name'),
             unit: _string(json, 'unit'),
-            stock: _int(json['currentStock'])));
+            stock: _int(json['currentStock'])),
+        legacyParts: true);
+  }
+
+  @override
+  Future<ResultPage<MaterialRequest>> materials(
+          String workOrderId, String technicianId,
+          {MaterialStatus? status, int page = 1}) async =>
+      _page(
+          await api.get('material-requests', token: await _token(), query: {
+            'workOrderId': workOrderId,
+            'page': '$page',
+            'limit': '20',
+            if (status != null) 'status': status.name.toUpperCase(),
+          }),
+          page,
+          (json) => _material(json, workOrderId, technicianId));
+
+  @override
+  Future<MaterialRequest> requestMaterials(
+      WorkOrder order, MaterialDraft draft, String technicianId) async {
+    _owner(order, technicianId);
+    if (!order.canRequestMaterials(technicianId)) {
+      throw const WorkOrderValidation(
+          'Bắt đầu hoặc tiếp tục công việc trước khi yêu cầu vật tư.');
+    }
+    draft.validate();
+    final request = _material(
+        _map(await api.post(
+            'work-orders/${Uri.encodeComponent(order.id)}/material-requests',
+            {
+              'items': draft.parts
+                  .map((p) => {'partId': p.part.id, 'quantity': p.quantity})
+                  .toList(),
+              'notes': draft.notes.trim(),
+            },
+            token: await _token())),
+        order.id,
+        technicianId);
+    if (request.status != MaterialStatus.pending || request.items.isEmpty) {
+      _invalid();
+    }
+    return request;
+  }
+
+  @override
+  Future<MaterialRequest> cancelMaterial(
+      MaterialRequest request, String reason, String technicianId) async {
+    _reason(reason);
+    if (request.requestedById != technicianId ||
+        request.status != MaterialStatus.pending) {
+      throw const WorkOrderValidation('Chỉ hủy yêu cầu đang chờ do bạn gửi.');
+    }
+    final result = _material(
+        _map(await api.patch(
+            'material-requests/${Uri.encodeComponent(request.id)}/cancel',
+            {'reason': reason.trim()},
+            token: await _token())),
+        request.workOrderId,
+        technicianId);
+    if (result.id != request.id || result.status != MaterialStatus.cancelled) {
+      _invalid();
+    }
+    return result;
+  }
+
+  @override
+  Future<MaterialRequest> materialDetail(
+      MaterialRequest request, String technicianId) async {
+    final result = _material(
+        _map(await api.get(
+            'material-requests/${Uri.encodeComponent(request.id)}',
+            token: await _token())),
+        request.workOrderId,
+        technicianId);
+    if (result.id != request.id || result.items.isEmpty) _invalid();
+    return result;
+  }
+
+  void _reason(String reason) {
+    if (reason.trim().isEmpty || reason.trim().length > 1000) {
+      throw const WorkOrderValidation('Nhập lý do từ 1 đến 1000 ký tự.');
+    }
+  }
+
+  MaterialRequest _material(
+      Map<String, dynamic> json, String workId, String technicianId) {
+    if (_string(json, 'workOrderId') != workId ||
+        _string(json, 'requestedById') != technicianId) {
+      throw const ApiException('Bạn không có quyền xem yêu cầu này.',
+          statusCode: 403);
+    }
+    final status = switch (json['status']) {
+      'PENDING' => MaterialStatus.pending,
+      'APPROVED' => MaterialStatus.approved,
+      'REJECTED' => MaterialStatus.rejected,
+      'CANCELLED' => MaterialStatus.cancelled,
+      _ => _invalid(),
+    };
+    final raw = json['items'] ?? const [];
+    if (raw is! List) _invalid();
+    return MaterialRequest(
+        id: _string(json, 'id'),
+        workOrderId: workId,
+        requestedById: technicianId,
+        status: status,
+        notes: _optionalString(json['notes']),
+        reason: _optionalString(json['resolutionReason']),
+        createdAt: _date(json['createdAt']),
+        items: List.unmodifiable(raw.map((value) {
+          final item = _map(value), part = _map(_map(value)['part']);
+          final quantity = _int(item['quantity']);
+          if (quantity < 1) _invalid();
+          return UsedPart(
+              partId: _string(item, 'partId'),
+              code: _string(part, 'partCode'),
+              name: _string(part, 'name'),
+              unit: _string(part, 'unit'),
+              quantity: quantity);
+        })));
   }
 
   WorkOrder _order(Map<String, dynamic> json, String technicianId,
@@ -157,6 +290,7 @@ class ApiWorkOrderRepository implements WorkOrderRepository {
       'CLOSED' => WorkOrderStatus.closed,
       'CANCELLED' => WorkOrderStatus.cancelled,
       'ON_HOLD' => WorkOrderStatus.onHold,
+      'REWORK_REQUIRED' => WorkOrderStatus.reworkRequired,
       _ => _invalid(),
     };
     final rawParts = summary ? json['parts'] ?? const [] : json['parts'];
@@ -179,6 +313,9 @@ class ApiWorkOrderRepository implements WorkOrderRepository {
       startedAt: _date(json['startTime']),
       completedAt: _date(json['completedTime']),
       completionNotes: _optionalString(json['completionNotes']),
+      rootCause: _optionalString(json['rootCause']),
+      solution: _optionalString(json['solution']),
+      verificationNotes: _optionalString(json['verificationNotes']),
       actualHours: hours,
       parts: List.unmodifiable(rawParts.map((raw) {
         final usage = _map(raw), part = _map(_map(raw)['part']);
@@ -195,20 +332,19 @@ class ApiWorkOrderRepository implements WorkOrderRepository {
   }
 
   ResultPage<T> _page<T>(
-      Object? raw, int requestedPage, T Function(Map<String, dynamic>) parse) {
+      Object? raw, int requestedPage, T Function(Map<String, dynamic>) parse,
+      {bool legacyParts = false}) {
     final data = _map(raw), meta = _map(_map(raw)['meta']);
-    if (data['success'] != true || data['data'] is! List) _invalid();
+    final items = data[legacyParts ? 'data' : 'items'];
+    if ((legacyParts && data['success'] != true) || items is! List) _invalid();
     final page = _int(meta['page']),
         totalPages = _int(meta['totalPages']),
         total = _int(meta['total']);
-    if (page != requestedPage ||
-        page < 1 ||
-        (data['data'] as List).length > 20) {
+    if (page != requestedPage || page < 1 || items.length > 20) {
       _invalid();
     }
     return ResultPage(
-        items: List.unmodifiable(
-            (data['data'] as List).map((item) => parse(_map(item)))),
+        items: List.unmodifiable(items.map((item) => parse(_map(item)))),
         page: page,
         totalPages: totalPages,
         total: total);

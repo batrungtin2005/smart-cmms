@@ -65,35 +65,47 @@ Bản iOS cần được build và kiểm thử trên macOS có Xcode. Kiểm th
 - Gọi `GET /api/v1/assets/inspect/:code` với Bearer token, hiển thị tên, trạng thái, vị trí/xưởng, hãng/model/serial, giờ vận hành, thông số và tối đa 5 lịch sử bảo trì gần nhất.
 - Phân biệt mã không hợp lệ, không tìm thấy tài sản, lỗi mạng/máy chủ. QR JSON có UUID khác với tài sản trên backend sẽ bị từ chối. Token hết hạn sẽ đưa về đăng nhập.
 
-Phần mobile Work Order tuần 3 đã triển khai; backend hiện chỉ có entity, chưa có controller/service. Do đó **chưa nghiệm thu được Work Order với dữ liệu thật**. SQLite và hàng đợi đồng bộ chưa triển khai. iOS chưa được build/kiểm thử trên macOS.
+Phần mobile tuần 3 đã chuyển sang API thật của SV03 (backend từ develop `63665f2`; nhánh SV05 đã gộp develop `96fb8bd` ngày 15/11/2026). Máy hiện tại đã sao lưu và cập nhật database thử nghiệm `smart_cmms_mobile_dev` bằng ba migration có sẵn của SV03. Không sửa mã nguồn backend; SQLite/đồng bộ và iOS vẫn còn phần việc riêng.
 
-### Tuần 3 — công việc được giao
+### Tuần 3 — công việc và vật tư qua API thật
 
-- Danh sách công việc, lọc Khẩn cấp/Cao/Trung bình/Thấp, phân trang và kéo tải lại.
-- Chi tiết thiết bị/công việc, trạng thái, hạn dự kiến; chỉ cho bắt đầu khi ASSIGNED.
-- Bắt đầu làm → IN_PROGRESS; nhập ghi chú, giờ thực hiện, tìm/chọn phụ tùng, số lượng và bỏ phụ tùng.
-- Kiểm tra ghi chú/thời gian/số lượng/tồn kho, giữ bản nháp khi chọn phụ tùng và hỏi trước khi bỏ thay đổi. Nút Back hệ thống đóng bàn phím trước khi xử lý việc rời màn hình.
-- Xem lại báo cáo rồi xác nhận hoàn thành → COMPLETED, hiển thị kết quả chỉ đọc và chờ quản lý nghiệm thu.
-- Chống gửi lặp trong lúc đang xử lý. Kết quả ghi chưa rõ ràng sẽ khóa gửi tiếp và yêu cầu đọc lại trạng thái; bản nháp vẫn được giữ trong màn hình.
-- Tách repository API và repository dữ liệu mẫu. **Không tự dùng mẫu khi API lỗi.**
+- Danh sách được giao, lọc Khẩn cấp/Cao/Trung bình/Thấp, phân trang, tải lại; đọc đúng `{items, meta}` của backend.
+- Bắt đầu ASSIGNED → IN_PROGRESS; tạm dừng ON_HOLD có lý do và tiếp tục; nhận diện REWORK_REQUIRED và nút Bắt đầu sửa lại.
+- Tìm/chọn phụ tùng, số lượng và gửi yêu cầu PENDING. Tồn chỉ để tham khảo, không giữ chỗ hoặc trừ kho lúc gửi. Xem yêu cầu/chi tiết, lý do từ chối và hủy yêu cầu đang chờ bằng lý do.
+- Thủ kho/Admin duyệt và xuất kho ở luồng riêng. Mobile kỹ thuật viên không có nút duyệt kho. Bấm Cập nhật công việc để lấy trạng thái mới và vật tư đã cấp.
+- Nhập nguyên nhân, cách xử lý, ghi chú tùy chọn; xem lại và xác nhận qua `/work-orders/:id/complete`. Máy chủ tự tính giờ sửa; không gửi lại vật tư/giá/timestamp.
+- Chặn hoàn thành khi còn PENDING hoặc chưa đọc được trạng thái vật tư, kể cả yêu cầu chờ ở trang sau. Giữ báo cáo khi chọn phụ tùng/tải lại; hỏi trước khi bỏ bản nháp.
+- Chống bấm gửi lặp. Nếu POST vật tư mất phản hồi, khóa gửi, yêu cầu tải lại/kiểm tra danh sách và chủ động bắt đầu bản nháp mới; không tự retry.
+- Kết quả COMPLETED/CLOSED chỉ đọc, hiển thị nguyên nhân, cách xử lý, giờ sửa và vật tư từ backend. Quản lý nghiệm thu ngoài app kỹ thuật viên.
 
-| Chế độ | Cách chạy tại `mobile/` | Dữ liệu công việc |
+| Chế độ | Chạy tại mobile/ | Dữ liệu |
 | --- | --- | --- |
-| Mặc định | `flutter run -d emulator-5554` | Gọi API thật; hiện hiển thị máy chủ chưa hỗ trợ danh sách |
-| Dữ liệu mẫu | `flutter run -d emulator-5554 --dart-define=WORK_ORDERS_DEMO=true` | Có nhãn DỮ LIỆU MẪU trên mọi màn hình Work Order; thao tác chỉ ở bộ nhớ |
+| Mặc định | `flutter run -d emulator-5554` | API thật, cần backend và database đã migration |
+| Mẫu trong bộ nhớ | `flutter run -d emulator-5554 --dart-define=WORK_ORDERS_DEMO=true` | Có nhãn DỮ LIỆU MẪU; không có tài khoản thủ kho, có thể hủy PENDING để thử hoàn thành không dùng vật tư |
 
-Đăng nhập và QR vẫn sử dụng backend thật trong cả hai chế độ. Dữ liệu công việc mẫu tách theo kỹ thuật viên và mất khi đóng tiến trình app; không ghi Work Order hoặc trừ kho trên server. Bản nháp chưa có lưu bền SQLite.
+Đăng nhập/QR vẫn dùng backend thật ở cả hai chế độ. Bản nháp trong bộ nhớ mất khi đóng tiến trình; công việc gửi qua API thật được lưu trên backend. Chi tiết endpoint/payload trong [hợp đồng API hiện tại](docs/work_order_api_contract.md).
 
-Adapter gọi API theo [hợp đồng đề xuất với SV03](docs/work_order_api_contract.md). Trước tích hợp thật phải thống nhất payload và xử lý hoàn thành/vật tư nguyên tử ở backend; mobile không gọi xuất kho và đổi trạng thái bằng hai yêu cầu riêng.
+Đã kiểm tra: `flutter analyze` không có vấn đề; **81 Flutter tests đạt**; **45 backend tests có sẵn của SV03 đạt** (gồm PostgreSQL trong schema test riêng); **6 nhóm kiểm tra API thật đạt**, gồm chống trừ kho lặp, chặn PENDING và vòng sửa lại/nghiệm thu. API my-tasks và parts đều trả 200. Báo cáo `build/verification/work-orders-live-api-report.json` và `work-orders-api-readiness.json` được sinh lại tại máy, không chứa mật khẩu/token.
 
-`flutter analyze` không có vấn đề; toàn bộ **75 kiểm thử Flutter đạt**, gồm các kiểm thử trước đó và 24 kiểm thử Work Order. Kiểm tra backend thật bằng `node mobile/tool/check_work_orders_api.mjs` từ thư mục gốc: hiện my-tasks trả 404, danh mục phụ tùng trả 200. Báo cáo `build/verification/work-orders-api-readiness.json` không xác nhận nghiệm thu mutation backend.
+Ngày 15/11/2026, **7 bước chạy APK API thật trên Android 11/API 30 đạt**: lọc công việc, bắt đầu, gửi vật tư, chặn hoàn thành khi chờ duyệt, cập nhật sau khi Admin duyệt, hoàn thành và mở lại tiến trình. Báo cáo/nguyên nhân/cách xử lý đã lưu trên backend, tồn kho chỉ trừ một lần. `build/verification/work-orders-android-report.json` ghi `status: passed`, `mode: live-api` và SHA-256 trùng APK đã cài; đây là kết quả bản API thật, độc lập với bản mẫu cũ.
 
-Hai APK có cùng mã ứng dụng; cài bản sau sẽ thay bản trước:
+Với database cũ, dừng backend trước khi áp dụng migration; giữ PostgreSQL chạy. Tại thư mục gốc:
 
-- `build/app/outputs/flutter-apk/app-debug.apk`: bản mặc định gọi API thật.
-- `build/verification/app-week3-demo.apk`: bản thử luồng tuần 3 có nhãn dữ liệu mẫu.
+```powershell
+# Chỉ dùng cho database smart_cmms_mobile_dev trên localhost.
+# Database máy này đã migration; lệnh prepare chỉ cần khi thiết lập/cập nhật DB thử.
+node mobile/tool/prepare_week3_backend.mjs
+```
 
-Để tạo lại đúng hai bản trên, chạy tại `mobile/`:
+Sau đó build/khởi động backend như hướng dẫn bên dưới, rồi tạo fixture và kiểm tra API:
+
+```powershell
+node mobile/tool/verify_work_orders_api.mjs
+```
+
+`prepare_week3_backend.mjs` giữ bản sao lưu trước khi áp dụng migration; báo cáo/backup ở `build/verification/`. `verify_work_orders_api.mjs` tạo phụ tùng thử riêng và các công việc [SV05 DEMO ...] đã giao cho mobile_tech. Dữ liệu có ghi xuống database thử và có kiểm tra xuất kho; không chạy trên database dùng chung/sản xuất.
+
+Đóng gói tại `mobile/`, trước khi mở giả lập nếu máy thiếu RAM:
 
 ```powershell
 flutter build apk --debug --dart-define=WORK_ORDERS_DEMO=true
@@ -102,11 +114,18 @@ Copy-Item -LiteralPath build/app/outputs/flutter-apk/app-debug.apk -Destination 
 flutter build apk --debug
 ```
 
-Sau khi đã build hai APK và mở giả lập, chạy `node mobile/tool/verify_android_work_orders.mjs` từ thư mục gốc để thử thông báo API chưa hỗ trợ và luồng mẫu: lọc → bắt đầu → ghi chú/thời gian → phụ tùng → xác nhận hoàn thành. Script chỉ thao tác dữ liệu công việc mẫu. Báo cáo/ảnh được lưu ở `mobile/build/verification/` sau khi kiểm tra thành công.
+`build/app/outputs/flutter-apk/app-debug.apk` là bản API thật; `build/verification/app-week3-demo.apk` là bản trong bộ nhớ. Cùng mã ứng dụng nên cài bản sau thay bản trước.
 
-Đã chạy thành công **6 bước trên giả lập Android API 36** ở chế độ mẫu: nhận danh sách có nhãn, lọc ưu tiên, bắt đầu, giữ báo cáo/phụ tùng khi chuyển màn hình, xác nhận hoàn thành và mở lại kết quả chỉ đọc. Báo cáo [work-orders-android-report.json](build/verification/work-orders-android-report.json) ghi `mode: demo-only`, SHA-256 của APK đã chạy và `liveWorkOrderIntegrationAccepted: false`. Ảnh [xem lại báo cáo](build/verification/work-order-review-android.png) và [kết quả hoàn thành](build/verification/work-order-completed-android.png) minh họa đúng dữ liệu mẫu đã kiểm tra. Bản API cũng đã hiển thị đúng thông báo thiếu endpoint trên Android, ảnh [work-orders-api-unavailable-android.png](build/verification/work-orders-api-unavailable-android.png).
+Với APK mặc định và AVD thử nghiệm 720×1280 đang chạy, tại thư mục gốc:
 
-Để kiểm tra riêng bản mẫu đang cài, dùng `node mobile/tool/verify_android_work_orders.mjs --demo-only --skip-demo-install`; mỗi lần chạy đóng/mở lại tiến trình nên dữ liệu mẫu được khởi tạo mới. Công cụ này dùng AVD thử nghiệm ở độ phân giải 720×1280; thao tác thu bàn phím và cuộn màn hình dựa vào kích thước đó. Các tệp trong `build/` được Git bỏ qua, cần build/chạy kiểm tra lại trên máy khác.
+```powershell
+node mobile/tool/verify_android_work_orders_live.mjs
+```
+
+Kịch bản dùng công việc CRITICAL mới trong `work-orders-live-fixture.json`, nhập yêu cầu trên Android, dùng Admin API riêng để duyệt, rồi xác nhận hoàn thành trên app và mở lại từ backend. Không chạy cờ mẫu; mỗi lần chạy cần fixture ASSIGNED mới. Báo cáo ghi đúng APK hash và các bước đã đạt ở `work-orders-android-report.json`; ảnh có tiền tố `work-order-live-`. Entry point cũ `verify_android_work_orders.mjs` chuyển tiếp sang kịch bản này.
+
+Để demo thủ công: [HUONG_DAN_DEMO.md](HUONG_DAN_DEMO.md). Lệnh `node mobile/tool/approve_mobile_material.mjs` chỉ duyệt một yêu cầu của công việc CRITICAL trong fixture SV05 hiện tại, dùng Admin từ `.env`; không thuộc luồng quyền kỹ thuật viên trong Flutter.
+
 
 Kiểm tra cập nhật cho phần QR: `flutter analyze` không có vấn đề, toàn bộ **51 kiểm thử Flutter đạt** (gồm 28 kiểm thử xác thực trước đó); 4 kiểm tra API tài sản thật đạt. APK mới đã build/cài được. Trên giả lập đã kiểm tra thành công đăng nhập, từ chối quyền camera, mã không hợp lệ, mã không tồn tại và tra cứu thủ công tài sản thật. Ảnh ở `build/verification/qr-camera-denied-android.png` và `qr-manual-detail-android.png`.
 
@@ -120,7 +139,7 @@ Ca camera được kiểm tra riêng và đã đạt: camera Android nhận QR J
 - APK debug build và cài được trên Android API 36.
 - Trên giả lập: từ chối sai mật khẩu, đăng nhập thật, khôi phục phiên sau khi dừng tiến trình và đăng xuất bền vững đều đạt. Báo cáo và ảnh nằm ở `build/verification/auth-android-report.json`, `auth-home-android.png`, `auth-restored-android.png`, `auth-logged-out-android.png`.
 
-Máy hiện tại có 8 GB RAM. AVD `smart_cmms_api_36` dùng 2048 MB RAM khi kiểm tra camera, bàn phím máy tính và màn hình thử nghiệm 720×1280. Bàn phím ảo từng gây treo, và mức RAM 1536 MB từng khiến Android đóng tiến trình kiểm thử. Nên build xong rồi mở giả lập khi máy thiếu RAM.
+Máy hiện tại có 8 GB RAM. Demo tuần 3 dùng AVD AOSP Android 11 `smart_cmms_api_30_light`, RAM 2048 MB, màn hình 720×1280, bàn phím máy tính và điều hướng ba nút. AVD API 36 dùng trước đó có thể nâng RAM lên 2560 MB dù yêu cầu 2048 MB, gây treo System UI khi máy thiếu bộ nhớ. Nên build xong rồi mới mở giả lập; xem lệnh khởi động bản nhẹ trong [HUONG_DAN_DEMO.md](HUONG_DAN_DEMO.md).
 
 ### Cấu trúc mã nguồn
 
@@ -141,7 +160,7 @@ lib/
     presentation/                   # Camera, nhập mã, chi tiết và xử lý lỗi
   features/work_orders/
     domain/                         # Công việc, vật tư, báo cáo, hợp đồng repository
-    data/                           # Adapter API đề xuất và kho dữ liệu mẫu riêng
+    data/                           # API Work Order/vật tư và kho dữ liệu mẫu riêng
     presentation/                   # Danh sách, chi tiết, bản nháp, chọn phụ tùng và xác nhận
 ```
 
@@ -229,13 +248,13 @@ APK debug nằm ở `build/app/outputs/flutter-apk/app-debug.apk`. Unit/widget t
 ---
 
 ## LỘ TRÌNH TIẾP THEO
-Tiếp theo là thống nhất/tích hợp API Work Order của SV03, sau đó SQLite/đồng bộ tuần 4–5 và nghiệm thu trên thiết bị. Sync API vẫn là hợp đồng dự kiến.
+Work Order đã tích hợp API SV03. Tiếp theo là SQLite/đồng bộ tuần 4–5 và nghiệm thu trên thiết bị thật/iOS. Sync API vẫn là hợp đồng dự kiến.
 
 1. **Bổ sung offline cho tra cứu tài sản (tuần 4–5):**
    - Luồng online đã gọi `GET /api/v1/assets/inspect/:code` và hiển thị thông tin/lịch sử.
    - Cần bổ sung SQLite cache, thông báo dữ liệu lưu trên máy và thời điểm cập nhật khi mất mạng.
-2. **Tích hợp Work Order thật:**
-   - SV03 xác nhận và triển khai hợp đồng trong `docs/work_order_api_contract.md`.
+2. **Duy trì tích hợp Work Order thật:**
+   - Đã dùng hợp đồng SV03 trong `docs/work_order_api_contract.md`; tiếp tục kiểm tra khi backend thay đổi.
    - Chạy bản mặc định với dữ liệu được giao thật; kiểm tra JWT/ownership, đồng thời thay đổi phân công/trạng thái/tồn kho, chống xuất kho lặp và rollback.
    - Chụp ảnh đính kèm là phần mở rộng nếu nhóm thống nhất, chưa có trong luồng tuần 3 hiện tại.
 3. **CƠ CHẾ OFFLINE-FIRST (TIÊU CHÍ NGHIỆM THU ĐỒ ÁN):**

@@ -27,11 +27,16 @@ class WorkOrdersPage extends StatefulWidget {
 class _WorkOrdersPageState extends State<WorkOrdersPage> {
   late final WorkOrderController _work;
   final _notes = TextEditingController(),
-      _hours = TextEditingController(),
+      _rootCause = TextEditingController(),
+      _solution = TextEditingController(),
+      _materialNotes = TextEditingController(),
+      _reason = TextEditingController(),
       _search = TextEditingController();
   final _selections = <String, PartSelection>{};
   bool _dirty = false, _review = false, _discard = false, _picking = false;
-  String? _formError, _partsError;
+  bool _reportDirty = false, _pausing = false;
+  String? _cancelling;
+  String? _formError, _partsError, _materialFormError;
   bool _partsLoading = false;
   int _partsGeneration = 0;
   List<StockPart> _parts = [];
@@ -48,7 +53,10 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
   void dispose() {
     _work.dispose();
     _notes.dispose();
-    _hours.dispose();
+    _rootCause.dispose();
+    _solution.dispose();
+    _materialNotes.dispose();
+    _reason.dispose();
     _search.dispose();
     super.dispose();
   }
@@ -61,23 +69,42 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
 
   void _clearDraft() {
     _notes.clear();
-    _hours.clear();
+    _rootCause.clear();
+    _solution.clear();
+    _materialNotes.clear();
+    _reason.clear();
     _selections.clear();
     _dirty = false;
+    _reportDirty = false;
+    _pausing = false;
+    _cancelling = null;
     _review = false;
     _discard = false;
     _picking = false;
     _formError = null;
+    _materialFormError = null;
     _partsGeneration++;
   }
 
-  void _open(WorkOrder order) {
+  Future<void> _open(WorkOrder order) async {
     _clearDraft();
-    unawaited(_guard(_work.open(order.id)));
+    await _guard(_work.open(order.id));
+    if (!mounted || _work.selected?.id != order.id) return;
+    _rootCause.text = _work.selected!.rootCause ?? '';
+    _solution.text = _work.selected!.solution ?? '';
+    _notes.text = _work.selected!.completionNotes ?? '';
   }
 
   void _back() {
     if (_work.actionBusy) return;
+    if (_pausing || _cancelling != null) {
+      setState(() {
+        _pausing = false;
+        _cancelling = null;
+        _reason.clear();
+      });
+      return;
+    }
     if (_discard) {
       setState(() => _discard = false);
       return;
@@ -105,17 +132,19 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
 
   void _changed(String _) {
     _dirty = true;
+    _reportDirty = true;
     if (_formError != null) setState(() => _formError = null);
   }
 
   CompletionDraft _draft() => CompletionDraft(
-      notes: _notes.text,
-      actualHours: double.tryParse(_hours.text.trim().replaceAll(',', '.')) ??
-          double.nan,
-      parts: List.unmodifiable(_selections.values));
+      notes: _notes.text, rootCause: _rootCause.text, solution: _solution.text);
   void _prepareCompletion() {
     FocusScope.of(context).unfocus();
     try {
+      if (_selections.isNotEmpty || _materialNotes.text.trim().isNotEmpty) {
+        throw const WorkOrderValidation(
+            'Gửi hoặc bỏ yêu cầu vật tư đang soạn trước khi hoàn thành.');
+      }
       _draft().validate();
       setState(() {
         _review = true;
@@ -141,10 +170,16 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
     await _guard(_work.open(id));
     if (!mounted) return;
     if (_work.selected != null &&
-        !_work.selected!.canComplete(widget.technicianId)) {
+        [
+          WorkOrderStatus.completed,
+          WorkOrderStatus.closed,
+          WorkOrderStatus.cancelled
+        ].contains(_work.selected!.status)) {
       setState(() {
         _dirty = false;
         _review = false;
+        _selections.clear();
+        _materialNotes.clear();
       });
     }
   }
@@ -210,6 +245,8 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
   Widget _row(String title, String value) => Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Text('$title: $value'));
+  Widget _identified(String id, Widget field) =>
+      Semantics(container: true, identifier: id, child: field);
   Widget _card(String title, List<Widget> children) => Card(
       child: Padding(
           padding: const EdgeInsets.all(16),
@@ -279,14 +316,16 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
           key: const PageStorageKey('work-parts'),
           padding: const EdgeInsets.all(16),
           children: [
-            TextField(
-                controller: _search,
-                key: const ValueKey('part_search'),
-                textInputAction: TextInputAction.search,
-                onSubmitted: (_) => _loadParts(),
-                decoration: const InputDecoration(
-                    labelText: 'Tìm mã hoặc tên phụ tùng',
-                    border: OutlineInputBorder())),
+            _identified(
+                'work_part_search',
+                TextField(
+                    controller: _search,
+                    key: const ValueKey('part_search'),
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: (_) => _loadParts(),
+                    decoration: const InputDecoration(
+                        labelText: 'Tìm mã hoặc tên phụ tùng',
+                        border: OutlineInputBorder()))),
             TextButton.icon(
                 onPressed: () => _loadParts(),
                 icon: const Icon(Icons.search),
@@ -298,7 +337,6 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
             for (final part in _parts)
               Card(
                   child: ListTile(
-                enabled: part.stock > 0,
                 title: Text(part.name),
                 subtitle:
                     Text('${part.code} · Tồn: ${part.stock} ${part.unit}'),
@@ -307,15 +345,13 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
                     : _selections.containsKey(part.id)
                         ? 'Đã chọn'
                         : 'Chọn'),
-                onTap: part.stock == 0
-                    ? null
-                    : () => setState(() {
-                          _selections.putIfAbsent(
-                              part.id, () => PartSelection(part, 1));
-                          _dirty = true;
-                          _picking = false;
-                          _partsGeneration++;
-                        }),
+                onTap: () => setState(() {
+                  _selections.putIfAbsent(
+                      part.id, () => PartSelection(part, 1));
+                  _dirty = true;
+                  _picking = false;
+                  _partsGeneration++;
+                }),
               )),
             if (_partsLoading) const Center(child: CircularProgressIndicator()),
             if (!_partsLoading && _partsPage?.hasMore == true)
@@ -331,30 +367,32 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
           const SizedBox(height: 8),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(
-                child: TextFormField(
-              key: ValueKey('quantity_${selection.part.id}'),
-              initialValue: '${selection.quantity}',
-              enabled: !_work.actionBusy,
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(9)
-              ],
-              decoration: InputDecoration(
-                  labelText: 'Số lượng (${selection.part.unit})',
-                  helperText: 'Tồn kho: ${selection.part.stock}',
-                  errorText: selection.quantity < 1 ||
-                          selection.quantity > selection.part.stock
-                      ? 'Số lượng vượt giới hạn'
-                      : null,
-                  border: const OutlineInputBorder()),
-              onChanged: (value) => setState(() {
-                _dirty = true;
-                _formError = null;
-                _selections[selection.part.id] =
-                    PartSelection(selection.part, int.tryParse(value) ?? 0);
-              }),
-            )),
+                child: _identified(
+                    'work_quantity_${selection.part.id}',
+                    TextFormField(
+                      key: ValueKey('quantity_${selection.part.id}'),
+                      initialValue: '${selection.quantity}',
+                      enabled: !_work.actionBusy,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(9)
+                      ],
+                      decoration: InputDecoration(
+                          labelText: 'Số lượng (${selection.part.unit})',
+                          helperText: 'Tồn kho: ${selection.part.stock}',
+                          errorText: selection.quantity < 1 ||
+                                  selection.quantity > 1000000
+                              ? 'Số lượng vượt giới hạn'
+                              : null,
+                          border: const OutlineInputBorder()),
+                      onChanged: (value) => setState(() {
+                        _dirty = true;
+                        _formError = null;
+                        _selections[selection.part.id] = PartSelection(
+                            selection.part, int.tryParse(value) ?? 0);
+                      }),
+                    ))),
             IconButton(
                 tooltip: 'Bỏ phụ tùng',
                 onPressed: _work.actionBusy
@@ -368,60 +406,213 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
         ]),
       );
   Widget _completionForm() => _card('Kết quả thực hiện', [
-        TextField(
-            controller: _notes,
-            key: const ValueKey('completion_notes'),
-            enabled: !_work.actionBusy,
-            maxLines: 3,
-            maxLength: 5000,
-            onChanged: _changed,
-            decoration: const InputDecoration(
-                labelText: 'Ghi chú xử lý', border: OutlineInputBorder())),
+        _identified(
+            'work_root_cause',
+            TextField(
+                controller: _rootCause,
+                key: const ValueKey('root_cause'),
+                enabled: !_work.actionBusy,
+                maxLength: 255,
+                onChanged: _changed,
+                decoration: const InputDecoration(
+                    labelText: 'Nguyên nhân', border: OutlineInputBorder()))),
         const SizedBox(height: 12),
-        TextField(
-            controller: _hours,
-            key: const ValueKey('actual_hours'),
-            enabled: !_work.actionBusy,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            onChanged: _changed,
-            decoration: const InputDecoration(
-                labelText: 'Thời gian thực hiện (giờ)',
-                hintText: 'Ví dụ: 0,5',
-                border: OutlineInputBorder())),
-        const SizedBox(height: 16),
-        const Text('Phụ tùng đã sử dụng',
-            style: TextStyle(fontWeight: FontWeight.bold)),
-        if (_selections.isEmpty) const Text('Chưa chọn phụ tùng.'),
-        ..._selections.values.map(_partEditor),
-        OutlinedButton.icon(
-            onPressed: _work.actionBusy || _work.mustRefresh
-                ? null
-                : () {
-                    setState(() => _picking = true);
-                    unawaited(_loadParts());
-                  },
-            icon: const Icon(Icons.add),
-            label: const Text('Thêm phụ tùng')),
+        _identified(
+            'work_solution',
+            TextField(
+                controller: _solution,
+                key: const ValueKey('solution'),
+                enabled: !_work.actionBusy,
+                maxLines: 3,
+                maxLength: 10000,
+                onChanged: _changed,
+                decoration: const InputDecoration(
+                    labelText: 'Cách xử lý', border: OutlineInputBorder()))),
+        const SizedBox(height: 12),
+        _identified(
+            'work_completion_notes',
+            TextField(
+                controller: _notes,
+                key: const ValueKey('completion_notes'),
+                enabled: !_work.actionBusy,
+                maxLines: 3,
+                maxLength: 10000,
+                onChanged: _changed,
+                decoration: const InputDecoration(
+                    labelText: 'Ghi chú thêm (không bắt buộc)',
+                    border: OutlineInputBorder()))),
+        const SizedBox(height: 12),
+        const Text(
+            'Máy chủ tự tính thời gian sửa chữa, không tính thời gian tạm dừng.'),
+        if (!_work.materialsReady)
+          const Text('Cần tải được trạng thái vật tư trước khi hoàn thành.'),
+        if (_work.pendingMaterials > 0)
+          Text(
+              'Còn ${_work.pendingMaterials} yêu cầu vật tư chờ duyệt. Chờ thủ kho xử lý hoặc hủy yêu cầu.'),
         if (_formError != null) _error(_formError!),
         const SizedBox(height: 12),
         FilledButton(
-            onPressed: _work.actionBusy || _work.mustRefresh
-                ? null
-                : _prepareCompletion,
+            onPressed: _work.canFinish ? _prepareCompletion : null,
             child: const Text('Hoàn thành')),
+      ]);
+
+  Future<void> _sendMaterials() async {
+    FocusScope.of(context).unfocus();
+    final draft = MaterialDraft(
+        parts: _selections.values.toList(), notes: _materialNotes.text);
+    try {
+      draft.validate();
+    } on WorkOrderValidation catch (failure) {
+      setState(() => _materialFormError = failure.message);
+      return;
+    }
+    final success = await _guard(_work.requestMaterials(draft));
+    if (!mounted) return;
+    setState(() {
+      if (success) {
+        _selections.clear();
+        _materialNotes.clear();
+        _dirty = _reportDirty;
+        _materialFormError = null;
+      }
+    });
+  }
+
+  Widget _materials(WorkOrder order) => _card('Vật tư cho công việc', [
+        const Text(
+            'Gửi yêu cầu → thủ kho duyệt và cấp vật tư → cập nhật công việc để xem kết quả.'),
+        if (widget.repository.isDemo)
+          const Text(
+              'Bản mẫu không mô phỏng tài khoản thủ kho. Có thể hủy yêu cầu chờ; luồng cấp vật tư cần chạy với backend thật.'),
+        if (_work.materialsLoading) const LinearProgressIndicator(),
+        if (_work.materialsError != null)
+          _error(_work.materialsError!, retry: _refreshDetail),
+        for (final request in _work.requests) ...[
+          const Divider(),
+          Text(
+              'Yêu cầu ${request.id.substring(0, request.id.length < 8 ? request.id.length : 8)} · ${request.status.label}',
+              key: ValueKey('material_${request.id}'),
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+          if (request.notes?.isNotEmpty == true) Text(request.notes!),
+          if (request.reason != null) Text('Lý do: ${request.reason}'),
+          for (final item in request.items)
+            Text('${item.name} · ${item.quantity} ${item.unit}'),
+          if (request.items.isEmpty)
+            TextButton(
+                onPressed: _work.actionBusy
+                    ? null
+                    : () => _guard(_work.materialDetail(request)),
+                child: const Text('Xem vật tư yêu cầu')),
+          if (request.status == MaterialStatus.pending &&
+              _cancelling != request.id)
+            TextButton(
+                onPressed: _work.actionBusy || _work.mustRefresh
+                    ? null
+                    : () => setState(() {
+                          _cancelling = request.id;
+                          _pausing = false;
+                          _reason.clear();
+                        }),
+                child: const Text('Hủy yêu cầu')),
+          if (_cancelling == request.id) ...[
+            TextField(
+                controller: _reason,
+                key: const ValueKey('cancel_reason'),
+                maxLength: 1000,
+                decoration:
+                    const InputDecoration(labelText: 'Lý do hủy yêu cầu')),
+            TextButton(
+                onPressed: _work.actionBusy
+                    ? null
+                    : () async {
+                        final success = await _guard(
+                            _work.cancelMaterial(request, _reason.text));
+                        if (mounted && success) {
+                          setState(() {
+                            _cancelling = null;
+                            _reason.clear();
+                          });
+                        }
+                      },
+                child: const Text('Xác nhận hủy yêu cầu')),
+          ],
+        ],
+        if (_work.materialsPage?.hasMore == true)
+          TextButton(
+              onPressed: _work.materialsLoading || _work.actionBusy
+                  ? null
+                  : () => _guard(_work.moreMaterials()),
+              child: const Text('Xem thêm yêu cầu')),
+        if (_work.materialReviewRequired) ...[
+          const Text(
+              'Kết quả gửi trước chưa rõ. Tải lại, kiểm tra các yêu cầu vừa gửi để tránh tạo trùng.'),
+          TextButton(
+              onPressed:
+                  !_work.materialsReady || _work.mustRefresh || _work.actionBusy
+                      ? null
+                      : () {
+                          _work.acknowledgeMaterialReview();
+                          setState(() {
+                            _selections.clear();
+                            _materialNotes.clear();
+                            _dirty = _reportDirty;
+                          });
+                        },
+              child: const Text('Đã kiểm tra yêu cầu, bắt đầu bản nháp mới')),
+        ],
+        if (order.canRequestMaterials(widget.technicianId)) ...[
+          const SizedBox(height: 16),
+          const Text('Soạn yêu cầu vật tư',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          if (_selections.isEmpty) const Text('Chưa chọn phụ tùng.'),
+          ..._selections.values.map(_partEditor),
+          OutlinedButton.icon(
+              onPressed: _work.actionBusy ||
+                      _work.mustRefresh ||
+                      _work.materialReviewRequired
+                  ? null
+                  : () {
+                      setState(() => _picking = true);
+                      unawaited(_loadParts());
+                    },
+              icon: const Icon(Icons.add),
+              label: const Text('Thêm phụ tùng')),
+          _identified(
+              'work_material_notes',
+              TextField(
+                  controller: _materialNotes,
+                  key: const ValueKey('material_notes'),
+                  maxLength: 1000,
+                  enabled: !_work.actionBusy,
+                  onChanged: (_) {
+                    _dirty = true;
+                  },
+                  decoration: const InputDecoration(
+                      labelText: 'Ghi chú yêu cầu vật tư'))),
+          if (_materialFormError != null) _error(_materialFormError!),
+          const SizedBox(height: 12),
+          FilledButton(
+              onPressed: _work.actionBusy ||
+                      _work.mustRefresh ||
+                      _work.materialReviewRequired ||
+                      !_work.materialsReady
+                  ? null
+                  : _sendMaterials,
+              child: const Text('Gửi yêu cầu vật tư')),
+        ],
       ]);
   Widget _reviewCard(WorkOrder order) => _card('Xác nhận kết quả', [
         Text(order.code),
-        _row('Thời gian', '${_hours.text.trim()} giờ'),
+        _row('Nguyên nhân', _rootCause.text.trim()),
+        _row('Cách xử lý', _solution.text.trim()),
         Text(_notes.text.trim()),
         const SizedBox(height: 12),
-        if (_selections.isEmpty) const Text('Không sử dụng phụ tùng.'),
-        for (final selection in _selections.values)
-          Text(
-              '${selection.part.name}: ${selection.quantity} ${selection.part.unit}'),
+        if (order.parts.isEmpty) const Text('Chưa có vật tư được cấp.'),
+        for (final selection in order.parts)
+          Text('${selection.name}: ${selection.quantity} ${selection.unit}'),
         const SizedBox(height: 16),
         FilledButton(
-            onPressed: _work.actionBusy || _work.mustRefresh ? null : _complete,
+            onPressed: _work.canFinish ? _complete : null,
             child: const Text('Xác nhận hoàn thành')),
         TextButton(
             onPressed:
@@ -473,6 +664,8 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
             _row('Hạn dự kiến', workDate(order.scheduledEnd)),
             if (order.startedAt != null)
               _row('Bắt đầu', workDate(order.startedAt)),
+            if (order.verificationNotes != null)
+              _row('Ghi chú nghiệm thu', order.verificationNotes!),
           ]),
           if (_work.error != null)
             _error(_work.error!,
@@ -491,7 +684,47 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
                     ? null
                     : () => _guard(_work.start()),
                 icon: const Icon(Icons.play_arrow),
-                label: const Text('Bắt đầu làm')),
+                label: Text(order.status == WorkOrderStatus.onHold
+                    ? 'Tiếp tục làm'
+                    : order.status == WorkOrderStatus.reworkRequired
+                        ? 'Bắt đầu sửa lại'
+                        : 'Bắt đầu làm')),
+          if (order.canComplete(widget.technicianId)) ...[
+            TextButton(
+                onPressed: _work.actionBusy || _work.mustRefresh
+                    ? null
+                    : () => setState(() {
+                          _pausing = !_pausing;
+                          _cancelling = null;
+                          _reason.clear();
+                        }),
+                child: const Text('Tạm dừng công việc')),
+            if (_pausing)
+              _card('Lý do tạm dừng', [
+                TextField(
+                    controller: _reason,
+                    key: const ValueKey('pause_reason'),
+                    maxLength: 1000,
+                    decoration:
+                        const InputDecoration(labelText: 'Lý do tạm dừng')),
+                TextButton(
+                    onPressed: _work.actionBusy
+                        ? null
+                        : () async {
+                            final success =
+                                await _guard(_work.pause(_reason.text));
+                            if (mounted && success) {
+                              setState(() {
+                                _pausing = false;
+                                _reason.clear();
+                                _review = false;
+                              });
+                            }
+                          },
+                    child: const Text('Xác nhận tạm dừng')),
+              ]),
+          ],
+          _materials(order),
           if (order.canComplete(widget.technicianId))
             _review ? _reviewCard(order) : _completionForm(),
           if (order.status == WorkOrderStatus.completed ||
@@ -502,6 +735,8 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
                   : 'Công việc đã được nghiệm thu.'),
               _row('Hoàn thành', workDate(order.completedAt)),
               _row('Thời gian thực hiện', '${order.actualHours} giờ'),
+              _row('Nguyên nhân', order.rootCause ?? 'Chưa cập nhật'),
+              _row('Cách xử lý', order.solution ?? 'Chưa cập nhật'),
               Text(order.completionNotes ?? 'Chưa có ghi chú.'),
               for (final part in order.parts)
                 Text('${part.name} · ${part.quantity} ${part.unit}'),
