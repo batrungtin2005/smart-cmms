@@ -1,5 +1,20 @@
 import { useState } from "react";
-import { Search, Filter, LayoutGrid, List } from "lucide-react";
+import {
+  Search,
+  Filter,
+  LayoutGrid,
+  List,
+  Plus,
+  X,
+  Wrench,
+  UserCheck,
+} from "lucide-react";
+
+interface UsedPart {
+  partId: string;
+  name: string;
+  qty: number;
+}
 
 interface WorkOrder {
   id: string;
@@ -9,10 +24,10 @@ interface WorkOrder {
   priority: "LOW" | "MEDIUM" | "HIGH";
   createdAt: string;
   assignee: string;
+  usedParts: UsedPart[];
 }
 
-// Sinh tự động 1.000 phiếu Work Orders mẫu
-const mockWorkOrders: WorkOrder[] = Array.from({ length: 1000 }, (_, i) => {
+const initialWorkOrders: WorkOrder[] = Array.from({ length: 1000 }, (_, i) => {
   const statuses: WorkOrder["status"][] = [
     "OPEN",
     "ASSIGNED",
@@ -29,17 +44,35 @@ const mockWorkOrders: WorkOrder[] = Array.from({ length: 1000 }, (_, i) => {
     priority: priorities[i % priorities.length],
     createdAt: `2026-11-${((i % 28) + 1).toString().padStart(2, "0")}`,
     assignee: `Kỹ thuật viên ${(i % 5) + 1}`,
+    usedParts:
+      i % 2 === 0
+        ? [
+            { partId: "PRT-01", name: "Vòng bi SKF 6205", qty: 2 },
+            { partId: "PRT-03", name: "Dầu thủy lực ISO VG 68", qty: 5 },
+          ]
+        : [{ partId: "PRT-02", name: "Lọc gió máy nén khí", qty: 1 }],
   };
 });
 
 export default function WorkOrders() {
+  const [orders, setOrders] = useState<WorkOrder[]>(initialWorkOrders);
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
-  const filteredOrders = mockWorkOrders.filter((wo) => {
+  // State Modal Tạo Phiếu Mới
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newAsset, setNewAsset] = useState("Thiết bị công nghiệp #1");
+  const [newPriority, setNewPriority] = useState<WorkOrder["priority"]>("HIGH");
+  const [newAssignee, setNewAssignee] = useState("Kỹ thuật viên 1");
+
+  // State Modal Chi Tiết & Phân Công
+  const [selectedWO, setSelectedWO] = useState<WorkOrder | null>(null);
+
+  const filteredOrders = orders.filter((wo) => {
     const matchSearch =
       wo.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       wo.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -53,6 +86,38 @@ export default function WorkOrders() {
     (currentPage - 1) * pageSize,
     currentPage * pageSize,
   );
+
+  const handleCreateWO = (e: React.FormEvent) => {
+    e.preventDefault();
+    const created: WorkOrder = {
+      id: `WO-${1000 + orders.length + 1}`,
+      title: newTitle,
+      assetName: newAsset,
+      status: "OPEN",
+      priority: newPriority,
+      createdAt: "2026-11-17",
+      assignee: newAssignee,
+      usedParts: [],
+    };
+    setOrders([created, ...orders]);
+    setShowCreateModal(false);
+    setNewTitle("");
+  };
+
+  const handleUpdateWO = (
+    id: string,
+    updatedAssignee: string,
+    updatedStatus: WorkOrder["status"],
+  ) => {
+    setOrders((prev) =>
+      prev.map((wo) =>
+        wo.id === id
+          ? { ...wo, assignee: updatedAssignee, status: updatedStatus }
+          : wo,
+      ),
+    );
+    setSelectedWO(null);
+  };
 
   const columns: { key: WorkOrder["status"]; label: string; color: string }[] =
     [
@@ -75,55 +140,77 @@ export default function WorkOrders() {
       >
         <div>
           <h2 style={{ margin: 0, color: "#0f172a" }}>
-            Quản lý Work Orders ({mockWorkOrders.length} phiếu)
+            Quản lý Work Orders ({orders.length} phiếu)
           </h2>
           <p
             style={{ margin: "4px 0 0 0", color: "#64748b", fontSize: "14px" }}
           >
-            Theo dõi tiến độ sửa chữa thiết bị theo mô hình Kanban 5 cột
+            Bấm vào thẻ phiếu để phân công kỹ thuật viên & xem phụ tùng sử dụng
           </p>
         </div>
-        <div
-          style={{
-            display: "flex",
-            gap: "8px",
-            background: "#e2e8f0",
-            padding: "4px",
-            borderRadius: "6px",
-          }}
-        >
+
+        <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           <button
-            onClick={() => setViewMode("kanban")}
+            onClick={() => setShowCreateModal(true)}
             style={{
-              padding: "6px 12px",
-              border: "none",
-              borderRadius: "4px",
-              background: viewMode === "kanban" ? "#fff" : "transparent",
-              cursor: "pointer",
-              fontWeight: "bold",
               display: "flex",
               alignItems: "center",
-              gap: "4px",
-            }}
-          >
-            <LayoutGrid size={16} /> Kanban
-          </button>
-          <button
-            onClick={() => setViewMode("list")}
-            style={{
-              padding: "6px 12px",
+              gap: "6px",
+              padding: "8px 14px",
+              background: "#0284c7",
+              color: "#fff",
               border: "none",
-              borderRadius: "4px",
-              background: viewMode === "list" ? "#fff" : "transparent",
+              borderRadius: "6px",
               cursor: "pointer",
               fontWeight: "bold",
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
+              fontSize: "13px",
             }}
           >
-            <List size={16} /> Danh sách
+            <Plus size={16} /> Tạo phiếu mới
           </button>
+
+          <div
+            style={{
+              display: "flex",
+              gap: "8px",
+              background: "#e2e8f0",
+              padding: "4px",
+              borderRadius: "6px",
+            }}
+          >
+            <button
+              onClick={() => setViewMode("kanban")}
+              style={{
+                padding: "6px 12px",
+                border: "none",
+                borderRadius: "4px",
+                background: viewMode === "kanban" ? "#fff" : "transparent",
+                cursor: "pointer",
+                fontWeight: "bold",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
+              <LayoutGrid size={16} /> Kanban
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              style={{
+                padding: "6px 12px",
+                border: "none",
+                borderRadius: "4px",
+                background: viewMode === "list" ? "#fff" : "transparent",
+                cursor: "pointer",
+                fontWeight: "bold",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
+              <List size={16} /> Danh sách
+            </button>
+          </div>
         </div>
       </div>
 
@@ -265,12 +352,14 @@ export default function WorkOrders() {
                   {colOrders.slice(0, 15).map((wo) => (
                     <div
                       key={wo.id}
+                      onClick={() => setSelectedWO(wo)}
                       style={{
                         background: "#fff",
                         padding: "10px",
                         borderRadius: "6px",
                         border: "1px solid #cbd5e1",
                         boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+                        cursor: "pointer",
                       }}
                     >
                       <div
@@ -360,12 +449,20 @@ export default function WorkOrders() {
               {paginatedOrders.map((wo) => (
                 <tr
                   key={wo.id}
+                  onClick={() => setSelectedWO(wo)}
                   style={{
                     borderBottom: "1px solid #f1f5f9",
                     fontSize: "14px",
+                    cursor: "pointer",
                   }}
                 >
-                  <td style={{ padding: "12px", fontWeight: "bold" }}>
+                  <td
+                    style={{
+                      padding: "12px",
+                      fontWeight: "bold",
+                      color: "#0284c7",
+                    }}
+                  >
                     {wo.id}
                   </td>
                   <td style={{ padding: "12px" }}>{wo.title}</td>
@@ -424,6 +521,420 @@ export default function WorkOrders() {
                 Sau
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Tạo Phiếu Mới */}
+      {showCreateModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 1000,
+          }}
+        >
+          <form
+            onSubmit={handleCreateWO}
+            style={{
+              background: "#fff",
+              padding: "24px",
+              borderRadius: "10px",
+              width: "400px",
+            }}
+          >
+            <h3 style={{ marginTop: 0 }}>
+              Tạo Phiếu Công Việc Mới (Work Order)
+            </h3>
+            <div style={{ marginBottom: "12px" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "13px",
+                  marginBottom: "4px",
+                }}
+              >
+                Mô tả sự cố / công việc
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="VD: Thay vòng bi trục chính..."
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px",
+                  borderRadius: "4px",
+                  border: "1px solid #cbd5e1",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div style={{ marginBottom: "12px" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "13px",
+                  marginBottom: "4px",
+                }}
+              >
+                Thiết bị gặp sự cố
+              </label>
+              <input
+                type="text"
+                required
+                value={newAsset}
+                onChange={(e) => setNewAsset(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px",
+                  borderRadius: "4px",
+                  border: "1px solid #cbd5e1",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "10px",
+                marginBottom: "16px",
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "13px",
+                    marginBottom: "4px",
+                  }}
+                >
+                  Mức độ ưu tiên
+                </label>
+                <select
+                  value={newPriority}
+                  onChange={(e) =>
+                    setNewPriority(e.target.value as WorkOrder["priority"])
+                  }
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #cbd5e1",
+                  }}
+                >
+                  <option value="HIGH">HIGH (Khẩn cấp)</option>
+                  <option value="MEDIUM">MEDIUM (Trung bình)</option>
+                  <option value="LOW">LOW (Thấp)</option>
+                </select>
+              </div>
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "13px",
+                    marginBottom: "4px",
+                  }}
+                >
+                  Phân công KTV
+                </label>
+                <select
+                  value={newAssignee}
+                  onChange={(e) => setNewAssignee(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #cbd5e1",
+                  }}
+                >
+                  <option value="Kỹ thuật viên 1">Kỹ thuật viên 1</option>
+                  <option value="Kỹ thuật viên 2">Kỹ thuật viên 2</option>
+                  <option value="Kỹ thuật viên 3">Kỹ thuật viên 3</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                type="submit"
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  background: "#0284c7",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                Tạo phiếu
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  background: "#e2e8f0",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                }}
+              >
+                Hủy
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal Chi Tiết Phiếu, Phân Công KTV & Phụ Tùng Sử Dụng */}
+      {selectedWO && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              padding: "24px",
+              borderRadius: "10px",
+              width: "450px",
+              position: "relative",
+            }}
+          >
+            <button
+              onClick={() => setSelectedWO(null)}
+              style={{
+                position: "absolute",
+                top: "14px",
+                right: "14px",
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+              }}
+            >
+              <X size={20} />
+            </button>
+
+            <span
+              style={{ fontSize: "12px", fontWeight: "bold", color: "#0284c7" }}
+            >
+              {selectedWO.id} • Ngày tạo: {selectedWO.createdAt}
+            </span>
+            <h3 style={{ margin: "4px 0 8px 0" }}>{selectedWO.title}</h3>
+            <p
+              style={{
+                margin: "0 0 16px 0",
+                fontSize: "13px",
+                color: "#64748b",
+              }}
+            >
+              Thiết bị: <strong>{selectedWO.assetName}</strong>
+            </p>
+
+            {/* Phân công KTV & Cập nhật trạng thái */}
+            <div
+              style={{
+                background: "#f8fafc",
+                padding: "12px",
+                borderRadius: "8px",
+                marginBottom: "16px",
+                border: "1px solid #e2e8f0",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  fontWeight: "bold",
+                  fontSize: "13px",
+                  marginBottom: "10px",
+                }}
+              >
+                <UserCheck size={16} color="#0284c7" /> Điều phối & Trạng thái
+                xử lý
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "10px",
+                }}
+              >
+                <div>
+                  <label
+                    style={{
+                      fontSize: "12px",
+                      color: "#64748b",
+                      display: "block",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    Kỹ thuật viên phụ trách
+                  </label>
+                  <select
+                    value={selectedWO.assignee}
+                    onChange={(e) =>
+                      setSelectedWO({ ...selectedWO, assignee: e.target.value })
+                    }
+                    style={{
+                      width: "100%",
+                      padding: "6px",
+                      borderRadius: "4px",
+                      border: "1px solid #cbd5e1",
+                    }}
+                  >
+                    <option value="Kỹ thuật viên 1">Kỹ thuật viên 1</option>
+                    <option value="Kỹ thuật viên 2">Kỹ thuật viên 2</option>
+                    <option value="Kỹ thuật viên 3">Kỹ thuật viên 3</option>
+                    <option value="Kỹ thuật viên 4">Kỹ thuật viên 4</option>
+                    <option value="Kỹ thuật viên 5">Kỹ thuật viên 5</option>
+                  </select>
+                </div>
+                <div>
+                  <label
+                    style={{
+                      fontSize: "12px",
+                      color: "#64748b",
+                      display: "block",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    Trạng thái Kanban
+                  </label>
+                  <select
+                    value={selectedWO.status}
+                    onChange={(e) =>
+                      setSelectedWO({
+                        ...selectedWO,
+                        status: e.target.value as WorkOrder["status"],
+                      })
+                    }
+                    style={{
+                      width: "100%",
+                      padding: "6px",
+                      borderRadius: "4px",
+                      border: "1px solid #cbd5e1",
+                    }}
+                  >
+                    <option value="OPEN">OPEN</option>
+                    <option value="ASSIGNED">ASSIGNED</option>
+                    <option value="IN_PROGRESS">IN_PROGRESS</option>
+                    <option value="COMPLETED">COMPLETED</option>
+                    <option value="CLOSED">CLOSED</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Phụ tùng đã sử dụng */}
+            <div style={{ marginBottom: "18px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  fontWeight: "bold",
+                  fontSize: "13px",
+                  marginBottom: "8px",
+                }}
+              >
+                <Wrench size={16} color="#d97706" /> Phụ tùng vật tư sử dụng
+              </div>
+              {selectedWO.usedParts.length > 0 ? (
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    fontSize: "13px",
+                    border: "1px solid #e2e8f0",
+                  }}
+                >
+                  <thead>
+                    <tr
+                      style={{
+                        background: "#f8fafc",
+                        borderBottom: "1px solid #e2e8f0",
+                        textAlign: "left",
+                      }}
+                    >
+                      <th style={{ padding: "8px" }}>Mã PT</th>
+                      <th style={{ padding: "8px" }}>Tên phụ tùng</th>
+                      <th style={{ padding: "8px" }}>SL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedWO.usedParts.map((p, idx) => (
+                      <tr
+                        key={idx}
+                        style={{ borderBottom: "1px solid #f1f5f9" }}
+                      >
+                        <td style={{ padding: "8px", fontWeight: "bold" }}>
+                          {p.partId}
+                        </td>
+                        <td style={{ padding: "8px" }}>{p.name}</td>
+                        <td style={{ padding: "8px" }}>{p.qty}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: "13px",
+                    color: "#64748b",
+                    fontStyle: "italic",
+                  }}
+                >
+                  Chưa ghi nhận vật tư xuất kho cho phiếu này.
+                </p>
+              )}
+            </div>
+
+            <button
+              onClick={() =>
+                handleUpdateWO(
+                  selectedWO.id,
+                  selectedWO.assignee,
+                  selectedWO.status,
+                )
+              }
+              style={{
+                width: "100%",
+                padding: "10px",
+                background: "#16a34a",
+                color: "#fff",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontWeight: "bold",
+              }}
+            >
+              Lưu thay đổi phân công
+            </button>
           </div>
         </div>
       )}

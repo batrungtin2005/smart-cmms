@@ -9,9 +9,12 @@ interface Asset {
   location: string;
   status: "Hoạt động" | "Bảo trì" | "Hỏng";
   qrCode: string;
+  manufacturer: string;
+  serialNumber: string;
+  installDate: string;
+  lastMaintenance: string;
 }
 
-// Sinh tự động 300 thiết bị chuẩn chỉ tiêu nghiệm thu
 const mockAssets: Asset[] = Array.from({ length: 300 }, (_, i) => ({
   id: `AST-${(i + 1).toString().padStart(3, "0")}`,
   name: `Thiết bị công nghiệp #${i + 1}`,
@@ -19,6 +22,10 @@ const mockAssets: Asset[] = Array.from({ length: 300 }, (_, i) => ({
   location: `Xưởng A - Khu ${Math.floor(i / 10) + 1}`,
   status: i % 15 === 0 ? "Hỏng" : i % 8 === 0 ? "Bảo trì" : "Hoạt động",
   qrCode: `AST-${(i + 1).toString().padStart(3, "0")}`,
+  manufacturer: i % 2 === 0 ? "Mitsubishi Electric" : "Siemens AG",
+  serialNumber: `SN-2026-${10000 + i}`,
+  installDate: `2025-0${(i % 9) + 1}-15`,
+  lastMaintenance: `2026-10-${((i % 28) + 1).toString().padStart(2, "0")}`,
 }));
 
 export default function Assets() {
@@ -26,10 +33,10 @@ export default function Assets() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [showQRModal, setShowQRModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
-  // Lọc dữ liệu
   const filteredAssets = mockAssets.filter((asset) => {
     const matchSearch =
       asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -38,7 +45,6 @@ export default function Assets() {
     return matchSearch && matchStatus;
   });
 
-  // Phân trang mượt mà cho 300 thiết bị
   const totalPages = Math.ceil(filteredAssets.length / pageSize);
   const paginatedAssets = filteredAssets.slice(
     (currentPage - 1) * pageSize,
@@ -66,7 +72,7 @@ export default function Assets() {
           <p
             style={{ margin: "4px 0 0 0", color: "#64748b", fontSize: "14px" }}
           >
-            Quản lý và in mã QR code dán máy móc công nghiệp
+            Quản lý thông số kỹ thuật và in mã QR code dán máy móc công nghiệp
           </p>
         </div>
       </div>
@@ -222,6 +228,27 @@ export default function Assets() {
                     <button
                       onClick={() => {
                         setSelectedAsset(asset);
+                        setShowDetailModal(true);
+                      }}
+                      style={{
+                        padding: "6px 10px",
+                        background: "#f1f5f9",
+                        color: "#334155",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        fontSize: "12px",
+                        fontWeight: 500,
+                      }}
+                    >
+                      <Eye size={14} /> Chi tiết
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedAsset(asset);
                         setShowQRModal(true);
                       }}
                       style={{
@@ -296,6 +323,133 @@ export default function Assets() {
           </div>
         </div>
       </div>
+
+      {/* Modal Xem Chi Tiết Thiết Bị */}
+      {showDetailModal && selectedAsset && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              padding: "24px",
+              borderRadius: "12px",
+              width: "440px",
+              position: "relative",
+            }}
+          >
+            <button
+              onClick={() => setShowDetailModal(false)}
+              style={{
+                position: "absolute",
+                top: "16px",
+                right: "16px",
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+              }}
+            >
+              <X size={20} />
+            </button>
+            <h3 style={{ margin: "0 0 4px 0", color: "#0f172a" }}>
+              {selectedAsset.name}
+            </h3>
+            <p
+              style={{
+                margin: "0 0 16px 0",
+                color: "#0284c7",
+                fontWeight: "bold",
+                fontSize: "13px",
+              }}
+            >
+              Mã quản lý: {selectedAsset.id}
+            </p>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "12px",
+                background: "#f8fafc",
+                padding: "16px",
+                borderRadius: "8px",
+                fontSize: "13px",
+                marginBottom: "16px",
+              }}
+            >
+              <div>
+                <span style={{ color: "#64748b", display: "block" }}>
+                  Phân loại:
+                </span>
+                <strong>{selectedAsset.category}</strong>
+              </div>
+              <div>
+                <span style={{ color: "#64748b", display: "block" }}>
+                  Trạng thái:
+                </span>
+                <strong>{selectedAsset.status}</strong>
+              </div>
+              <div>
+                <span style={{ color: "#64748b", display: "block" }}>
+                  Nhà sản xuất:
+                </span>
+                <strong>{selectedAsset.manufacturer}</strong>
+              </div>
+              <div>
+                <span style={{ color: "#64748b", display: "block" }}>
+                  Số Serial:
+                </span>
+                <strong>{selectedAsset.serialNumber}</strong>
+              </div>
+              <div>
+                <span style={{ color: "#64748b", display: "block" }}>
+                  Vị trí lắp đặt:
+                </span>
+                <strong>{selectedAsset.location}</strong>
+              </div>
+              <div>
+                <span style={{ color: "#64748b", display: "block" }}>
+                  Ngày lắp đặt:
+                </span>
+                <strong>{selectedAsset.installDate}</strong>
+              </div>
+              <div style={{ gridColumn: "span 2" }}>
+                <span style={{ color: "#64748b", display: "block" }}>
+                  Bảo trì gần nhất:
+                </span>
+                <strong>{selectedAsset.lastMaintenance}</strong>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowDetailModal(false)}
+              style={{
+                width: "100%",
+                padding: "10px",
+                background: "#0f172a",
+                color: "#fff",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontWeight: "bold",
+              }}
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Modal In Mã QR */}
       {showQRModal && selectedAsset && (
