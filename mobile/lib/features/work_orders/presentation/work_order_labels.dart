@@ -18,6 +18,16 @@ extension StatusLabel on WorkOrderStatus {
         WorkOrderStatus.closed => 'Đã nghiệm thu',
         WorkOrderStatus.cancelled => 'Đã hủy',
         WorkOrderStatus.onHold => 'Tạm hoãn',
+        WorkOrderStatus.reworkRequired => 'Cần sửa lại',
+      };
+}
+
+extension MaterialLabel on MaterialStatus {
+  String get label => switch (this) {
+        MaterialStatus.pending => 'Chờ duyệt',
+        MaterialStatus.approved => 'Đã cấp vật tư',
+        MaterialStatus.rejected => 'Bị từ chối',
+        MaterialStatus.cancelled => 'Đã hủy',
       };
 }
 

@@ -1,123 +1,71 @@
-# SV05 ↔ SV03: hợp đồng Work Order đề xuất
+# SV05 — API Work Order đã tích hợp
 
-**Trạng thái: chờ SV03 xác nhận và triển khai.** Khi kiểm tra `origin/develop` và `origin/feat/sv03-work-order-engine`, module mới có entity; chưa có controller/service. Tài liệu này mô tả adapter mobile đã chuẩn bị, không xác nhận backend hiện có các API bên dưới. Phạm vi thay đổi lần này chỉ là mobile, không sửa backend/database.
+Cập nhật 15/11/2026 theo backend SV03 từ `63665f2`; nhánh mobile đã gộp develop `96fb8bd`. Tài liệu này thay hợp đồng đề xuất trước đó. Mobile dùng API hiện có, không sửa quy trình backend.
 
-## Xác thực và phân trang
+## Xác thực và dữ liệu trả về
 
-Mọi yêu cầu gửi `Authorization: Bearer <accessToken>`. Backend phải kiểm tra tài khoản TECHNICIAN đang hoạt động và lấy người được giao từ JWT; không tin mã kỹ thuật viên do client gửi. Mobile không gửi `technicianId` trong query/body để tự chọn người khác.
+Mọi yêu cầu có `Authorization: Bearer <token>`. Backend xác định kỹ thuật viên từ JWT; mobile không gửi `technicianId` để chọn người khác. Chỉ đọc/sửa công việc được giao.
 
-Response đi qua TransformInterceptor đang có:
-
-```json
-{
-  "success": true,
-  "statusCode": 200,
-  "data": {
-    "success": true,
-    "data": [],
-    "meta": {"page": 1, "limit": 20, "total": 0, "totalPages": 0}
-  },
-  "timestamp": "2026-11-13T00:00:00.000Z"
-}
-```
-
-Lớp `ApiClient` đã gỡ envelope ngoài. Dữ liệu phân trang bên trong theo kiểu `PartsService` hiện tại. Trang bắt đầu từ 1, mỗi trang 20 phần tử; `totalPages=0` khi rỗng.
-
-## Danh sách và chi tiết
-
-- `GET /api/v1/work-orders/my-tasks?page=1&limit=20&priority=CRITICAL`
-- `GET /api/v1/work-orders/:id`
-- `GET /api/v1/parts?page=1&limit=20&search=...` — endpoint danh mục phụ tùng đã có.
-
-`priority` bỏ qua khi chọn Tất cả. Giá trị đúng theo database là `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`. Giao diện lần lượt hiển thị Khẩn cấp, Cao, Trung bình, Thấp. API danh sách chỉ trả công việc thuộc kỹ thuật viên đăng nhập; đề xuất sắp ưu tiên trước, rồi mã công việc để phân trang ổn định.
-
-Ví dụ một đối tượng chi tiết, đặt trực tiếp trong `data` của envelope ngoài:
+Envelope chung:
 
 ```json
-{
-  "id": "11111111-2222-4333-8444-555555555555",
-  "workOrderCode": "WO-2026-0001",
-  "title": "Kiểm tra máy bơm",
-  "description": "Kiểm tra áp suất và hiện tượng rò dầu",
-  "assetId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
-  "asset": {"assetCode": "AST-001", "name": "Máy bơm số 1"},
-  "assignedTechnicianId": "99999999-2222-4333-8444-555555555555",
-  "priority": "CRITICAL",
-  "status": "ASSIGNED",
-  "scheduledEndDate": "2026-11-20",
-  "startTime": null,
-  "completedTime": null,
-  "actualRepairTimeHours": "0.00",
-  "completionNotes": null,
-  "parts": []
-}
+{"success":true,"statusCode":200,"data":{},"timestamp":"..."}
 ```
 
-Danh sách cần các trường định danh, tiêu đề, asset, người được giao, priority/status; có thể bỏ các trường báo cáo chi tiết `parts` và `actualRepairTimeHours`. Chi tiết và kết quả mutation cần trả đủ `parts` (kể cả mảng rỗng) và `actualRepairTimeHours` (number hoặc chuỗi decimal).
+ApiClient gỡ envelope ngoài. Danh sách Work Order và yêu cầu vật tư trả `{items, meta}`. Danh mục phụ tùng vẫn trả `{success:true, data:[], meta}` bên trong. Trang từ 1, limit mobile 20; `meta` gồm page/limit/total/totalPages.
 
-Các trạng thái đọc được: `OPEN`, `ASSIGNED`, `IN_PROGRESS`, `COMPLETED`, `CLOSED`, `CANCELLED`, `ON_HOLD`. Mobile tuần 3 chỉ cung cấp hai thao tác `ASSIGNED → IN_PROGRESS → COMPLETED`; nghiệm thu `CLOSED` thuộc quản lý.
+## API mobile sử dụng (prefix /api/v1)
 
-Mỗi phần tử `parts` của chi tiết có cấu trúc:
-
-```json
-{
-  "partId": "bbbbbbbb-2222-4333-8444-555555555555",
-  "quantityUsed": 2,
-  "part": {"partCode": "PART-001", "name": "Vòng bi", "unit": "Cái"}
-}
-```
-
-Danh mục `/parts` sử dụng các trường đã có: `id`, `partCode`, `name`, `unit`, `currentStock` nguyên không âm.
-
-## Bắt đầu và hoàn thành
-
-`PATCH /api/v1/work-orders/:id/status`
-
-```json
-{"status": "IN_PROGRESS", "expectedStatus": "ASSIGNED"}
-```
-
-Hoàn thành được đề xuất gửi **một yêu cầu nguyên tử**:
-
-```json
-{
-  "status": "COMPLETED",
-  "expectedStatus": "IN_PROGRESS",
-  "actualRepairTimeHours": 0.5,
-  "completionNotes": "Đã thay vòng bi và kiểm tra áp suất.",
-  "parts": [
-    {"partId": "bbbbbbbb-2222-4333-8444-555555555555", "quantityUsed": 2}
-  ]
-}
-```
-
-Ghi chú 1–5000 ký tự sau trim; giờ thực hiện >0; số lượng nguyên dương, không trùng partId. Cho phép `parts: []`. Client không gửi đơn giá/chi phí: backend lấy đơn giá từ kho.
-
-**Cần thống nhất với SV03:** README backend có endpoint thêm phụ tùng riêng, nhưng mobile hiện đề xuất gộp báo cáo, vật tư và hoàn thành trong cùng transaction để tránh gửi thành công vật tư rồi thất bại khi đổi trạng thái. Nếu SV03 chọn một endpoint hoàn thành nguyên tử khác, cập nhật adapter và kiểm thử tương ứng trước tích hợp thật.
-
-Backend cần khóa/kiểm tra lại Work Order và tồn kho trong transaction: đúng người được giao, đúng `expectedStatus`, phụ tùng còn hoạt động, đủ stock; sau đó ghi vật tư sử dụng, xuất kho, thời gian và trạng thái cùng nhau. Không cập nhật một phần khi có lỗi. Kiểm tra trạng thái dưới khóa phải ngăn yêu cầu lặp trừ kho hai lần. Ghi lịch sử bảo trì/KPI cần tuân theo quy tắc backend của nhóm.
-
-Trả đối tượng chi tiết đã cập nhật trong envelope ngoài. Trạng thái bắt đầu phải là `IN_PROGRESS`, hoàn thành phải là `COMPLETED`.
-
-## Lỗi và kết quả chưa rõ ràng
-
-| HTTP | Hành vi mobile |
+| Thao tác | Endpoint / body |
 | --- | --- |
-| 401 | Xóa phiên trên máy, về đăng nhập |
-| 403 / detail 404 | Ngừng hiển thị chi tiết công việc không còn quyền truy cập |
-| list 404 | Báo máy chủ chưa hỗ trợ; không tự chuyển sang dữ liệu mẫu |
-| 409 | Khóa gửi tiếp, yêu cầu tải lại trạng thái |
-| 400 / 422 | Giữ bản nháp để sửa; backend phải rollback toàn bộ |
-| Timeout / mất kết nối / 5xx khi ghi | Không báo thành công, không tự retry mutation; yêu cầu GET lại trạng thái |
+| Việc được giao | GET `/work-orders/my-tasks?page=1&limit=20&priority=CRITICAL` |
+| Chi tiết | GET `/work-orders/:id` |
+| Bắt đầu / tiếp tục / sửa lại | PATCH `/work-orders/:id/status`, `{"status":"IN_PROGRESS"}` |
+| Tạm dừng | PATCH `/work-orders/:id/status`, `{"status":"ON_HOLD","reason":"Chờ vật tư"}` |
+| Danh mục phụ tùng | GET `/parts?page=1&limit=20&search=...` |
+| Gửi yêu cầu vật tư | POST `/work-orders/:id/material-requests` |
+| Danh sách yêu cầu | GET `/material-requests?workOrderId=<id>&page=1&limit=20`; có thể lọc status |
+| Chi tiết yêu cầu | GET `/material-requests/:id` |
+| Hủy yêu cầu đang chờ | PATCH `/material-requests/:id/cancel`, `{"reason":"Không còn cần"}` |
+| Hoàn thành | PATCH `/work-orders/:id/complete` |
 
-Nếu GET sau timeout cho thấy đã COMPLETED, hiển thị báo cáo đã lưu. Nếu còn IN_PROGRESS, người dùng xem lại và xác nhận gửi; backend vẫn phải kiểm tra trạng thái dưới khóa để xử lý cuộc đua với yêu cầu trước đó.
+Không gửi `expectedStatus`: DTO backend không nhận và sẽ trả 400. Backend kiểm tra trạng thái dưới khóa giao dịch.
 
-## Điều kiện nghiệm thu tích hợp thật
+## Vật tư
 
-1. Endpoint nhận đúng JWT/role/ownership, không đọc hoặc sửa việc người khác.
-2. Lọc đủ bốn ưu tiên, phân trang, chi tiết và danh mục phụ tùng đúng cấu trúc.
-3. Bắt đầu/hoàn thành trả trạng thái chính xác và lưu được ghi chú, giờ thực hiện, vật tư.
-4. Hết kho hoặc đổi phân công/trạng thái giữa chừng không tạo cập nhật dở dang.
-5. Gửi trùng/timeout không xuất kho hoặc tạo lịch sử hai lần.
+```json
+{"items":[{"partId":"UUID","quantity":2}],"notes":"Thay vòng bi"}
+```
 
-Chưa triển khai SQLite, hàng đợi UUID, tự đồng bộ hoặc xử lý conflict offline ở tuần 3. Bản nháp hiện giữ trong bộ nhớ khi ở màn hình; đóng tiến trình app sẽ mất bản nháp. Những phần lưu bền/đồng bộ thuộc tuần 4–5.
+1–50 loại, không trùng, số lượng nguyên 1–1000000, ghi chú tối đa 1000 ký tự. Tồn hiển thị chỉ để tham khảo, không phải giữ chỗ; có thể yêu cầu khi kho đang thiếu. Backend kiểm tra tồn lại lúc duyệt.
+
+Gửi khi IN_PROGRESS/ON_HOLD → PENDING, chưa trừ kho. WAREHOUSE_KEEPER/Admin duyệt qua `/material-requests/:id/approve` → APPROVED, xuất kho nguyên tử. Mobile kỹ thuật viên không gọi API duyệt. REJECTED/CANCELLED không trừ kho. APPROVED nghĩa là đã cấp vật tư, không cần nhập lại khi hoàn thành.
+
+Danh sách yêu cầu chỉ trả tóm tắt; nút Xem vật tư yêu cầu gọi chi tiết để lấy items/part/quantity. Cần cộng các dòng vật tư cùng loại nếu backend cấp nhiều lần ở các đơn giá khác nhau; báo cáo hiện hiển thị từng dòng cấp.
+
+## Hoàn thành và sửa lại
+
+```json
+{"rootCause":"Vòng bi mòn","solution":"Thay vòng bi và chạy thử","completionNotes":"Áp suất ổn định"}
+```
+
+Nguyên nhân bắt buộc 1–255 ký tự, cách xử lý bắt buộc 1–10000 ký tự; ghi chú tùy chọn tối đa 10000. Không gửi giờ sửa, vật tư, đơn giá, timestamp hoặc người thực hiện. Máy chủ tính actualRepairTimeHours từ lịch sử, loại khoảng tạm dừng/chờ nghiệm thu/chờ làm lại.
+
+IN_PROGRESS → COMPLETED. Còn yêu cầu vật tư PENDING thì bị chặn. Quản lý nghiệm thu ACCEPT → CLOSED; REJECT → REWORK_REQUIRED. Mobile hiển thị Cần sửa lại, ghi chú nghiệm thu và nút Bắt đầu sửa lại. ON_HOLD có nút Tiếp tục làm. Không cung cấp thao tác nghiệm thu của quản lý trong app kỹ thuật viên.
+
+## Lỗi và gửi trùng
+
+- 401: kết thúc phiên trên máy.
+- 403/404 công việc: ngừng hiển thị dữ liệu không còn quyền truy cập.
+- 400/422: giữ báo cáo để sửa; không tự retry.
+- 409 hoặc timeout/5xx khi ghi: chưa báo thành công; khóa gửi tiếp tới khi đọc lại trạng thái.
+- POST vật tư chưa có idempotency key: nếu mất phản hồi, sau khi tải lại vẫn phải kiểm tra danh sách và xác nhận bắt đầu bản nháp mới. Không tự gửi lại bản nháp cũ.
+- Không đọc được trạng thái vật tư: khóa hoàn thành. Nếu danh sách nhiều trang, mobile kiểm tra riêng tổng PENDING để không bỏ sót yêu cầu chờ ở trang sau.
+
+## Database và kiểm thử
+
+Máy hiện tại dùng smart_cmms_mobile_dev; đã sao lưu và áp dụng 3 migration SV03 theo thứ tự: status_history → material_requests → work_order_completion. Script `prepare_week3_backend.mjs` chỉ hỗ trợ database mobile riêng trên localhost; không chạy lại toàn bộ SQL khởi tạo trên database cũ.
+
+`verify_work_orders_api.mjs` kiểm tra API thật bằng dữ liệu SV05, tạo fixture cho Android. `verify_android_work_orders_live.mjs` kiểm tra APK mặc định, có thao tác Admin riêng để mô phỏng duyệt kho. Các kết quả nằm trong `mobile/build/verification/`, không chứa mật khẩu/token.
+
+SQLite, hàng đợi UUID và đồng bộ offline chưa triển khai (tuần 4–5); iOS và điện thoại thật còn cần kiểm thử.

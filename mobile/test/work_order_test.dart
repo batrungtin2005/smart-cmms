@@ -78,7 +78,7 @@ void main() {
     final parts = apiRepo((request) async {
       expect(request.url.path, '/api/v1/parts');
       expect(request.url.queryParameters['search'], 'Vòng bi & phớt');
-      return success(pageJson([
+      return success(partsPageJson([
         {
           'id': stockId,
           'partCode': 'PART-001',
@@ -116,8 +116,7 @@ void main() {
       expect(request.method, 'PATCH');
       expect(request.url.path, '/api/v1/work-orders/$workId/status');
       expect(request.headers['Authorization'], 'Bearer session-token');
-      expect(jsonDecode(request.body),
-          {'status': 'IN_PROGRESS', 'expectedStatus': 'ASSIGNED'});
+      expect(jsonDecode(request.body), {'status': 'IN_PROGRESS'});
       return success(orderJson(status: 'IN_PROGRESS'));
     });
     final order = await repo.detail(workId, technician.id);
@@ -125,21 +124,18 @@ void main() {
         WorkOrderStatus.inProgress);
   });
   test(
-      'Completion submits notes, time and part quantities together without client prices',
+      'Completion sends cause and solution without server-owned time or materials',
       () async {
     final repo = apiRepo((request) async {
       if (request.method == 'GET') {
         return success(orderJson(status: 'IN_PROGRESS'));
       }
       final body = jsonDecode(request.body);
+      expect(request.url.path, '/api/v1/work-orders/$workId/complete');
       expect(body, {
-        'status': 'COMPLETED',
-        'expectedStatus': 'IN_PROGRESS',
+        'rootCause': 'Vòng bi mòn',
+        'solution': 'Thay vòng bi',
         'completionNotes': 'Đã kiểm tra và thay vòng bi.',
-        'actualRepairTimeHours': 0.5,
-        'parts': [
-          {'partId': stockId, 'quantityUsed': 2}
-        ]
       });
       return success(orderJson(status: 'COMPLETED'));
     });
@@ -148,8 +144,8 @@ void main() {
         order,
         const CompletionDraft(
             notes: ' Đã kiểm tra và thay vòng bi. ',
-            actualHours: 0.5,
-            parts: [PartSelection(fixturePart, 2)]),
+            rootCause: ' Vòng bi mòn ',
+            solution: ' Thay vòng bi '),
         technician.id);
     expect(completed.status, WorkOrderStatus.completed);
     expect(completed.parts.single.quantity, 2);
@@ -159,17 +155,12 @@ void main() {
         apiRepo((_) async => success(orderJson(status: 'IN_PROGRESS')));
     final order = await repo.detail(workId, technician.id);
     for (final draft in [
-      const CompletionDraft(notes: '', actualHours: 1, parts: []),
-      const CompletionDraft(notes: 'Fixed', actualHours: 0, parts: []),
-      const CompletionDraft(notes: 'Fixed', actualHours: double.nan, parts: []),
-      const CompletionDraft(
-          notes: 'Fixed',
-          actualHours: 1,
-          parts: [PartSelection(fixturePart, 13)]),
-      const CompletionDraft(notes: 'Fixed', actualHours: 1, parts: [
-        PartSelection(fixturePart, 1),
-        PartSelection(fixturePart, 1)
-      ]),
+      const CompletionDraft(rootCause: '', solution: 'Fixed'),
+      const CompletionDraft(rootCause: 'Cause', solution: '  '),
+      CompletionDraft(rootCause: 'A' * 256, solution: 'Fixed'),
+      CompletionDraft(rootCause: 'Cause', solution: 'A' * 10001),
+      CompletionDraft(
+          rootCause: 'Cause', solution: 'Fixed', notes: 'A' * 10001),
     ]) {
       await expectLater(repo.complete(order, draft, technician.id),
           throwsA(isA<WorkOrderValidation>()));
@@ -177,7 +168,8 @@ void main() {
     await expectLater(
         repo.start(order, 'other-user'), throwsA(isA<ApiException>()));
   });
-  test('Demo preserves technician isolation and commits parts only once',
+  test(
+      'Pending requests block completion; submission and cancellation never deduct stock',
       () async {
     final repo = DemoWorkOrderRepository();
     final order = (await repo.assigned('one')).items.first;
@@ -185,14 +177,18 @@ void main() {
         repo.detail(order.id, 'two'), throwsA(isA<ApiException>()));
     final started = await repo.start(order, 'one');
     final part = (await repo.parts('one')).items.first;
-    final draft = CompletionDraft(
-        notes: 'Thay vòng bi',
-        actualHours: 0.5,
-        parts: [PartSelection(part, 2)]);
+    const draft =
+        CompletionDraft(rootCause: 'Vòng bi mòn', solution: 'Thay vòng bi');
+    final request = await repo.requestMaterials(
+        started, MaterialDraft(parts: [PartSelection(part, 2)]), 'one');
+    await expectLater(
+        repo.complete(started, draft, 'one'), throwsA(isA<ApiException>()));
+    expect((await repo.parts('one')).items.first.stock, part.stock);
+    await repo.cancelMaterial(request, 'Không cần nữa', 'one');
     await repo.complete(started, draft, 'one');
     await expectLater(
         repo.complete(started, draft, 'one'), throwsA(isA<ApiException>()));
-    expect((await repo.parts('one')).items.first.stock, part.stock - 2);
+    expect((await repo.parts('one')).items.first.stock, part.stock);
     expect(
         (await repo.assigned('two')).items.any((item) => item.id == order.id),
         isFalse);
@@ -266,12 +262,12 @@ void main() {
     repo.completeHook = (_, __, ___) async =>
         throw const ApiException('Invalid', statusCode: 422);
     expect(
-        await controller.complete(
-            const CompletionDraft(notes: 'Đã sửa', actualHours: 1, parts: [])),
+        await controller.complete(const CompletionDraft(
+            rootCause: 'Vòng bi mòn', solution: 'Đã sửa')),
         isFalse);
     expect(controller.selected?.status, WorkOrderStatus.inProgress);
     expect(controller.mustRefresh, isFalse);
-    expect(controller.error, contains('tồn kho'));
+    expect(controller.error, contains('báo cáo'));
   });
   test('Duplicate taps do not send duplicate start requests', () async {
     final repo = FakeWorkOrderRepository();
@@ -298,8 +294,8 @@ void main() {
     await controller.open(order.id);
     await controller.start();
     final part = (await repo.parts(technician.id)).items.first;
-    final draft = CompletionDraft(
-        notes: 'Đã sửa xong', actualHours: 1, parts: [PartSelection(part, 2)]);
+    const draft =
+        CompletionDraft(rootCause: 'Vòng bi mòn', solution: 'Đã sửa xong');
     repo.completeHook = (order, draft, user) async {
       await repo.delegate.complete(order, draft, user);
       throw const ApiException('Response lost');
@@ -311,7 +307,132 @@ void main() {
     await controller.open(order.id);
     expect(controller.mustRefresh, isFalse);
     expect(controller.selected?.status, WorkOrderStatus.completed);
-    expect((await repo.parts(technician.id)).items.first.stock, part.stock - 2);
+    expect((await repo.parts(technician.id)).items.first.stock, part.stock);
+  });
+  test('Material POST carries JWT and never submits client prices', () async {
+    final repo = apiRepo((request) async {
+      if (request.method == 'GET') {
+        return success(orderJson(status: 'IN_PROGRESS'));
+      }
+      expect(request.method, 'POST');
+      expect(request.headers['Authorization'], 'Bearer session-token');
+      expect(request.url.path, '/api/v1/work-orders/$workId/material-requests');
+      expect(jsonDecode(request.body), {
+        'items': [
+          {'partId': stockId, 'quantity': 13}
+        ],
+        'notes': 'Thay vòng bi'
+      });
+      return success({
+        'id': 'request-1',
+        'workOrderId': workId,
+        'requestedById': technician.id,
+        'status': 'PENDING',
+        'items': [
+          {
+            'partId': stockId,
+            'quantity': 13,
+            'part': {'partCode': 'PART-001', 'name': 'Vòng bi', 'unit': 'Cái'}
+          }
+        ]
+      });
+    });
+    final order = await repo.detail(workId, technician.id);
+    final result = await repo.requestMaterials(
+        order,
+        const MaterialDraft(
+            parts: [PartSelection(fixturePart, 13)], notes: ' Thay vòng bi '),
+        technician.id);
+    expect(result.status, MaterialStatus.pending);
+    expect(result.items.single.quantity, 13);
+  });
+  test('Material list rejects foreign owner or work order', () async {
+    for (final mismatch in [
+      {'requestedById': 'other'},
+      {'workOrderId': 'other'}
+    ]) {
+      final repo = apiRepo((_) async => success(pageJson([
+            {
+              'id': 'request-1',
+              'workOrderId': workId,
+              'requestedById': technician.id,
+              'status': 'PENDING',
+              ...mismatch
+            }
+          ])));
+      await expectLater(
+          repo.materials(workId, technician.id), throwsA(isA<ApiException>()));
+    }
+  });
+  test('Rework and paused jobs can restart without expectedStatus', () async {
+    for (final status in ['REWORK_REQUIRED', 'ON_HOLD']) {
+      final repo = apiRepo((request) async {
+        if (request.method == 'GET') return success(orderJson(status: status));
+        expect(jsonDecode(request.body), {'status': 'IN_PROGRESS'});
+        return success(orderJson(status: 'IN_PROGRESS'));
+      });
+      final order = await repo.detail(workId, technician.id);
+      expect(order.canStart(technician.id), isTrue);
+      expect((await repo.start(order, technician.id)).status,
+          WorkOrderStatus.inProgress);
+    }
+  });
+  test('Uncertain material creation requires explicit review after refresh',
+      () async {
+    final repo = FakeWorkOrderRepository();
+    final controller = WorkOrderController(repo, technician.id);
+    addTearDown(controller.dispose);
+    final order = (await repo.assigned(technician.id)).items.first;
+    await controller.open(order.id);
+    await controller.start();
+    final part = (await repo.parts(technician.id)).items.first;
+    final draft = MaterialDraft(parts: [PartSelection(part, 2)]);
+    repo.materialHook = (wo, draft, user) async {
+      await repo.delegate.requestMaterials(wo, draft, user);
+      throw const ApiException('Lost response');
+    };
+    expect(await controller.requestMaterials(draft), isFalse);
+    expect(await controller.requestMaterials(draft), isFalse);
+    await controller.open(order.id);
+    expect(controller.pendingMaterials, 1);
+    expect(controller.materialReviewRequired, isTrue);
+    expect(await controller.requestMaterials(draft), isFalse);
+    expect(repo.materialCreates, 1);
+    controller.acknowledgeMaterialReview();
+    expect(controller.materialReviewRequired, isFalse);
+  });
+  test('Missing material data blocks completion', () async {
+    final repo = FakeWorkOrderRepository();
+    final controller = WorkOrderController(repo, technician.id);
+    addTearDown(controller.dispose);
+    final order = (await repo.assigned(technician.id)).items.first;
+    await controller.open(order.id);
+    await controller.start();
+    repo.materialsError =
+        const ApiException('Materials unavailable', statusCode: 503);
+    await controller.open(order.id);
+    expect(controller.canFinish, isFalse);
+    expect(
+        await controller.complete(
+            const CompletionDraft(rootCause: 'Cause', solution: 'Fixed')),
+        isFalse);
+    expect(repo.completions, 0);
+    expect(controller.selected?.status, WorkOrderStatus.inProgress);
+  });
+  test('Pending requests beyond first page still block completion', () async {
+    final repo = FakeWorkOrderRepository();
+    final order = (await repo.assigned(technician.id)).items.first;
+    repo.materialsHook = (id, user, status, page) async => ResultPage(
+        items: const [],
+        page: page,
+        totalPages: status == MaterialStatus.pending ? 1 : 2,
+        total: status == MaterialStatus.pending ? 1 : 21);
+    final controller = WorkOrderController(repo, technician.id);
+    addTearDown(controller.dispose);
+    await controller.open(order.id);
+    await controller.start();
+    expect(controller.pendingMaterials, 1);
+    expect(controller.canFinish, isFalse);
   });
   test(
       'Forbidden detail clears cached protected order; disposed controller ignores late reads',

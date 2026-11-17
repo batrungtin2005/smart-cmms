@@ -24,6 +24,8 @@ Map<String, Object?> orderJson({String status = 'ASSIGNED', String? owner}) => {
       'actualRepairTimeHours': status == 'COMPLETED' ? '0.50' : '0.00',
       'completionNotes':
           status == 'COMPLETED' ? 'Đã kiểm tra và thay vòng bi.' : null,
+      'rootCause': status == 'COMPLETED' ? 'Vòng bi mòn' : null,
+      'solution': status == 'COMPLETED' ? 'Thay vòng bi' : null,
       'parts': status == 'COMPLETED'
           ? [
               {
@@ -41,14 +43,24 @@ Map<String, Object?> orderJson({String status = 'ASSIGNED', String? owner}) => {
 Map<String, Object?> pageJson(List<Object?> items,
         {int page = 1, int? total, int totalPages = 1}) =>
     {
-      'success': true,
-      'data': items,
+      'items': items,
       'meta': {
         'page': page,
         'limit': 20,
         'total': total ?? items.length,
         'totalPages': totalPages
       },
+    };
+
+Map<String, Object?> partsPageJson(List<Object?> items) => {
+      'success': true,
+      'data': items,
+      'meta': {
+        'page': 1,
+        'limit': 20,
+        'total': items.length,
+        'totalPages': items.isEmpty ? 0 : 1
+      }
     };
 
 class FakeWorkOrderRepository implements WorkOrderRepository {
@@ -63,6 +75,45 @@ class FakeWorkOrderRepository implements WorkOrderRepository {
   Future<WorkOrder> Function(
       WorkOrder order, CompletionDraft draft, String user)? completeHook;
   Object? detailError, partsError;
+  Object? materialsError;
+  Future<ResultPage<MaterialRequest>> Function(
+          String workOrderId, String user, MaterialStatus? status, int page)?
+      materialsHook;
+  int materialCreates = 0;
+  Future<MaterialRequest> Function(
+      WorkOrder order, MaterialDraft draft, String user)? materialHook;
+  @override
+  Future<WorkOrder> pause(
+          WorkOrder order, String reason, String technicianId) =>
+      delegate.pause(order, reason, technicianId);
+  @override
+  Future<ResultPage<MaterialRequest>> materials(
+      String workOrderId, String technicianId,
+      {MaterialStatus? status, int page = 1}) async {
+    if (materialsError != null) throw materialsError!;
+    if (materialsHook != null) {
+      return materialsHook!(workOrderId, technicianId, status, page);
+    }
+    return delegate.materials(workOrderId, technicianId,
+        status: status, page: page);
+  }
+
+  @override
+  Future<MaterialRequest> requestMaterials(
+      WorkOrder order, MaterialDraft draft, String technicianId) {
+    materialCreates++;
+    return materialHook?.call(order, draft, technicianId) ??
+        delegate.requestMaterials(order, draft, technicianId);
+  }
+
+  @override
+  Future<MaterialRequest> cancelMaterial(
+          MaterialRequest request, String reason, String technicianId) =>
+      delegate.cancelMaterial(request, reason, technicianId);
+  @override
+  Future<MaterialRequest> materialDetail(
+          MaterialRequest request, String technicianId) =>
+      delegate.materialDetail(request, technicianId);
   @override
   Future<ResultPage<WorkOrder>> assigned(String technicianId,
           {WorkOrderPriority? priority, int page = 1}) =>

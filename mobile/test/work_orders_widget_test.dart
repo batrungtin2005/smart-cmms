@@ -31,8 +31,20 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> tapVisible(WidgetTester tester, Finder finder) async {
+  Future<void> reveal(WidgetTester tester, Finder finder) async {
+    final scrollable = find.byType(Scrollable).first;
+    if (finder.evaluate().isEmpty) {
+      tester.state<ScrollableState>(scrollable).position.jumpTo(0);
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(finder, 250,
+          scrollable: scrollable, maxScrolls: 40);
+    }
     await tester.ensureVisible(finder);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> tapVisible(WidgetTester tester, Finder finder) async {
+    await reveal(tester, finder);
     await tester.pumpAndSettle();
     await tester.tap(finder);
     await tester.pumpAndSettle();
@@ -44,12 +56,16 @@ void main() {
     await tapVisible(tester, find.byKey(ValueKey('order_${order.id}')));
   }
 
-  Future<void> fillReport(WidgetTester tester, {String hours = '0,5'}) async {
-    await tester.ensureVisible(find.byKey(const ValueKey('completion_notes')));
+  Future<void> fillReport(WidgetTester tester) async {
+    await reveal(tester, find.byKey(const ValueKey('root_cause')));
+    await tester.enterText(
+        find.byKey(const ValueKey('root_cause')), 'Vòng bi mòn');
+    await reveal(tester, find.byKey(const ValueKey('solution')));
+    await tester.enterText(
+        find.byKey(const ValueKey('solution')), 'Thay vòng bi');
+    await reveal(tester, find.byKey(const ValueKey('completion_notes')));
     await tester.enterText(find.byKey(const ValueKey('completion_notes')),
         'Đã kiểm tra và thay vòng bi.');
-    await tester.ensureVisible(find.byKey(const ValueKey('actual_hours')));
-    await tester.enterText(find.byKey(const ValueKey('actual_hours')), hours);
     await tester.pumpAndSettle();
   }
 
@@ -68,7 +84,7 @@ void main() {
     expect(find.text('Chưa có công việc phù hợp với bộ lọc.'), findsOneWidget);
   });
   testWidgets(
-      'Start, choose parts and confirm completion preserves the report and updates stock',
+      'Request and cancel materials preserve report; completion never changes stock',
       (tester) async {
     await open(tester);
     final order = await assigned();
@@ -81,6 +97,7 @@ void main() {
     final part = (await repo.parts(technician.id)).items.first;
     await tester.tap(find.text(part.name));
     await tester.pumpAndSettle();
+    await reveal(tester, find.byKey(const ValueKey('completion_notes')));
     expect(
         tester
             .widget<TextField>(find.byKey(const ValueKey('completion_notes')))
@@ -88,38 +105,54 @@ void main() {
             .text,
         'Đã kiểm tra và thay vòng bi.');
     final quantity = find.byKey(ValueKey('quantity_${part.id}'));
-    await tester.ensureVisible(quantity);
-    await tester.enterText(quantity, '13');
-    await tapVisible(tester, find.text('Hoàn thành'));
+    await reveal(tester, quantity);
+    await tester.enterText(quantity, '0');
+    await tapVisible(tester, find.text('Gửi yêu cầu vật tư'));
     expect(repo.completions, 0);
     expect(find.text('Xác nhận kết quả'), findsNothing);
-    await tester.ensureVisible(quantity);
+    await reveal(tester, quantity);
     await tester.enterText(quantity, '2');
+    await tapVisible(tester, find.text('Gửi yêu cầu vật tư'));
+    expect(repo.materialCreates, 1);
+    expect(find.textContaining('Chờ duyệt'), findsOneWidget);
+    expect(
+        tester
+            .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Hoàn thành'))
+            .onPressed,
+        isNull);
+    expect((await repo.parts(technician.id)).items.first.stock, part.stock);
+    await tapVisible(tester, find.text('Hủy yêu cầu'));
+    await reveal(tester, find.byKey(const ValueKey('cancel_reason')));
+    await tester.enterText(
+        find.byKey(const ValueKey('cancel_reason')), 'Không còn cần');
+    await tapVisible(tester, find.text('Xác nhận hủy yêu cầu'));
     await tapVisible(tester, find.text('Hoàn thành'));
     expect(find.text('Xác nhận kết quả'), findsOneWidget);
     expect(repo.completions, 0);
     await tapVisible(tester, find.text('Xác nhận hoàn thành'));
     expect(repo.completions, 1);
-    expect(repo.lastDraft?.actualHours, 0.5);
-    expect(repo.lastDraft?.parts.single.quantity, 2);
+    expect(repo.lastDraft?.rootCause, 'Vòng bi mòn');
+    expect(repo.lastDraft?.solution, 'Thay vòng bi');
     expect(find.text('Hoàn thành'), findsNothing);
     await tester
         .ensureVisible(find.text('Đã hoàn thành, chờ quản lý nghiệm thu.'));
     expect(find.text('Đã hoàn thành, chờ quản lý nghiệm thu.'), findsOneWidget);
-    expect((await repo.parts(technician.id)).items.first.stock, part.stock - 2);
+    expect((await repo.parts(technician.id)).items.first.stock, part.stock);
   });
-  testWidgets('Invalid time and quantities never send completion',
+  testWidgets('Missing cause or solution never sends completion',
       (tester) async {
     await open(tester);
     await openOrder(tester, await assigned());
     await tapVisible(tester, find.text('Bắt đầu làm'));
     await tapVisible(tester, find.text('Hoàn thành'));
     expect(repo.completions, 0);
-    expect(find.textContaining('Nhập ghi chú'), findsOneWidget);
-    await fillReport(tester, hours: '0');
+    expect(find.textContaining('Nhập nguyên nhân'), findsWidgets);
+    await reveal(tester, find.byKey(const ValueKey('root_cause')));
+    await tester.enterText(
+        find.byKey(const ValueKey('root_cause')), 'Vòng bi mòn');
     await tapVisible(tester, find.text('Hoàn thành'));
-    expect(find.textContaining('Thời gian thực hiện phải lớn hơn 0'),
-        findsOneWidget);
+    expect(find.textContaining('Nhập cách xử lý'), findsWidgets);
     expect(find.text('Xác nhận kết quả'), findsNothing);
   });
   testWidgets('Unsaved report requires explicit discard when leaving',
@@ -133,6 +166,7 @@ void main() {
     expect(find.text('Tiếp tục chỉnh sửa'), findsOneWidget);
     await tester.tap(find.text('Tiếp tục chỉnh sửa'));
     await tester.pumpAndSettle();
+    await reveal(tester, find.byKey(const ValueKey('completion_notes')));
     expect(
         tester
             .widget<TextField>(find.byKey(const ValueKey('completion_notes')))
@@ -166,6 +200,7 @@ void main() {
                 find.widgetWithText(FilledButton, 'Hoàn thành'))
             .onPressed,
         isNull);
+    await reveal(tester, find.byKey(const ValueKey('completion_notes')));
     expect(
         tester
             .widget<TextField>(find.byKey(const ValueKey('completion_notes')))
@@ -212,6 +247,7 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.text('Bỏ thay đổi'), findsNothing);
+    await reveal(tester, find.byKey(const ValueKey('completion_notes')));
     expect(
         tester
             .widget<TextField>(find.byKey(const ValueKey('completion_notes')))

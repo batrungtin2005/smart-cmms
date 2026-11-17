@@ -45,8 +45,10 @@ class DemoWorkOrderRepository implements WorkOrderRepository {
           statusCode: 409);
     }
     final updated = current.copyWith(
-        status: WorkOrderStatus.inProgress, startedAt: DateTime.now());
+        status: WorkOrderStatus.inProgress,
+        startedAt: current.startedAt ?? DateTime.now());
     _session(technicianId).orders[order.id] = updated;
+    _session(technicianId).runningSince[order.id] = DateTime.now();
     return updated;
   }
 
@@ -60,38 +62,116 @@ class DemoWorkOrderRepository implements WorkOrderRepository {
           statusCode: 409);
     }
     draft.validate();
-    for (final selection in draft.parts) {
-      final stored = session.stock[selection.part.id];
-      if (stored == null || selection.quantity > stored.stock) {
-        throw const ApiException(
-            'Tồn kho đã thay đổi. Hãy cập nhật danh sách phụ tùng.',
-            statusCode: 422);
-      }
-    }
-    // Validate everything before committing the in-memory demo transaction.
-    final used = <UsedPart>[];
-    for (final selection in draft.parts) {
-      final stored = session.stock[selection.part.id]!;
-      used.add(UsedPart(
-          partId: stored.id,
-          code: stored.code,
-          name: stored.name,
-          unit: stored.unit,
-          quantity: selection.quantity));
-      session.stock[stored.id] = StockPart(
-          id: stored.id,
-          code: stored.code,
-          name: stored.name,
-          unit: stored.unit,
-          stock: stored.stock - selection.quantity);
+    if (session.requests.values.any((r) =>
+        r.workOrderId == order.id && r.status == MaterialStatus.pending)) {
+      throw const ApiException(
+          'Còn yêu cầu vật tư chờ duyệt. Hãy xử lý trước khi hoàn thành.',
+          statusCode: 409);
     }
     final updated = current.copyWith(
         status: WorkOrderStatus.completed,
         completedAt: DateTime.now(),
         completionNotes: draft.notes.trim(),
-        actualHours: draft.actualHours,
-        parts: List.unmodifiable(used));
+        rootCause: draft.rootCause.trim(),
+        solution: draft.solution.trim(),
+        actualHours: ((session.activeSeconds[order.id] ?? 0) +
+                DateTime.now()
+                    .difference(session.runningSince[order.id] ??
+                        current.startedAt ??
+                        DateTime.now())
+                    .inSeconds) /
+            3600);
     session.orders[order.id] = updated;
+    return updated;
+  }
+
+  @override
+  Future<WorkOrder> pause(
+      WorkOrder order, String reason, String technicianId) async {
+    final current = _get(order.id, technicianId);
+    if (!current.canComplete(technicianId) ||
+        reason.trim().isEmpty ||
+        reason.trim().length > 1000) {
+      throw const WorkOrderValidation('Nhập lý do tạm dừng hợp lệ.');
+    }
+    final updated = current.copyWith(status: WorkOrderStatus.onHold);
+    final session = _session(technicianId);
+    session.activeSeconds[order.id] = (session.activeSeconds[order.id] ?? 0) +
+        DateTime.now()
+            .difference(session.runningSince.remove(order.id) ??
+                current.startedAt ??
+                DateTime.now())
+            .inSeconds;
+    _session(technicianId).orders[order.id] = updated;
+    return updated;
+  }
+
+  @override
+  Future<ResultPage<MaterialRequest>> materials(
+      String workOrderId, String technicianId,
+      {MaterialStatus? status, int page = 1}) async {
+    _get(workOrderId, technicianId);
+    return _page(
+        _session(technicianId)
+            .requests
+            .values
+            .where((r) =>
+                r.workOrderId == workOrderId &&
+                (status == null || r.status == status))
+            .toList()
+            .reversed
+            .toList(),
+        page);
+  }
+
+  @override
+  Future<MaterialRequest> requestMaterials(
+      WorkOrder order, MaterialDraft draft, String technicianId) async {
+    final current = _get(order.id, technicianId);
+    if (!current.canRequestMaterials(technicianId)) {
+      throw const WorkOrderValidation(
+          'Công việc chưa bắt đầu hoặc đã kết thúc.');
+    }
+    draft.validate();
+    final request = MaterialRequest(
+        id: const Uuid().v4(),
+        workOrderId: order.id,
+        requestedById: technicianId,
+        status: MaterialStatus.pending,
+        notes: draft.notes.trim(),
+        createdAt: DateTime.now(),
+        items: List.unmodifiable(draft.parts.map((p) => UsedPart(
+            partId: p.part.id,
+            code: p.part.code,
+            name: p.part.name,
+            unit: p.part.unit,
+            quantity: p.quantity))));
+    _session(technicianId).requests[request.id] = request;
+    return request;
+  }
+
+  @override
+  Future<MaterialRequest> materialDetail(
+      MaterialRequest request, String technicianId) async {
+    final current = _session(technicianId).requests[request.id];
+    if (current == null || current.requestedById != technicianId) {
+      throw const ApiException('Không tìm thấy yêu cầu.', statusCode: 404);
+    }
+    return current;
+  }
+
+  @override
+  Future<MaterialRequest> cancelMaterial(
+      MaterialRequest request, String reason, String technicianId) async {
+    final current = await materialDetail(request, technicianId);
+    if (current.status != MaterialStatus.pending ||
+        reason.trim().isEmpty ||
+        reason.trim().length > 1000) {
+      throw const WorkOrderValidation(
+          'Yêu cầu không còn chờ hoặc lý do chưa hợp lệ.');
+    }
+    final updated = current.cancelled(reason.trim());
+    _session(technicianId).requests[request.id] = updated;
     return updated;
   }
 
@@ -182,10 +262,15 @@ class _DemoSession {
           completedAt: i == 4 ? DateTime.now() : null,
           completionNotes:
               i == 4 ? 'Đã vệ sinh lọc và kiểm tra lại áp suất.' : null,
+          rootCause: i == 4 ? 'Lọc dầu bẩn' : null,
+          solution: i == 4 ? 'Vệ sinh lọc và kiểm tra áp suất' : null,
           actualHours: i == 4 ? 0.75 : 0);
       orders[order.id] = order;
     }
   }
   final orders = <String, WorkOrder>{};
   final stock = <String, StockPart>{};
+  final requests = <String, MaterialRequest>{};
+  final activeSeconds = <String, int>{};
+  final runningSince = <String, DateTime>{};
 }

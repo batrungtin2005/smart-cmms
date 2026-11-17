@@ -19,6 +19,13 @@ class WorkOrderController extends ChangeNotifier {
       mustRefresh = false;
   String? error, listError;
   bool sessionExpired = false, _disposed = false;
+  List<MaterialRequest> requests = [];
+  ResultPage<MaterialRequest>? materialsPage;
+  int pendingMaterials = 0;
+  bool materialsReady = false,
+      materialsLoading = false,
+      materialReviewRequired = false;
+  String? materialsError;
   int _listGeneration = 0, _detailGeneration = 0;
 
   Future<void> load({WorkOrderPriority? filter, bool more = false}) async {
@@ -65,7 +72,12 @@ class WorkOrderController extends ChangeNotifier {
     if (selected?.id != id) {
       selected = null;
       mustRefresh = false;
+      materialReviewRequired = false;
+      requests = [];
+      materialsPage = null;
+      pendingMaterials = 0;
     }
+    materialsReady = false;
     selectedId = id;
     detailLoading = true;
     error = null;
@@ -76,6 +88,7 @@ class WorkOrderController extends ChangeNotifier {
       selected = order;
       mustRefresh = false;
       _replace(order);
+      await _loadMaterials(id, generation);
     } catch (failure) {
       if (!_disposed && generation == _detailGeneration) {
         _failure(failure);
@@ -84,6 +97,7 @@ class WorkOrderController extends ChangeNotifier {
           orders.removeWhere((order) => order.id == id);
           selectedId = null;
           selected = null;
+          requests = [];
           listError = error;
         }
       }
@@ -102,13 +116,178 @@ class WorkOrderController extends ChangeNotifier {
     selected = null;
     detailLoading = false;
     mustRefresh = false;
+    materialsReady = false;
+    materialReviewRequired = false;
+    requests = [];
+    materialsPage = null;
+    materialsError = null;
+    materialsLoading = false;
+    pendingMaterials = 0;
     error = null;
     _notify();
   }
 
+  Future<void> _loadMaterials(String id, int generation,
+      {bool more = false}) async {
+    materialsLoading = true;
+    materialsError = null;
+    _notify();
+    try {
+      final page = more ? materialsPage!.page + 1 : 1;
+      final result = await repository.materials(id, technicianId, page: page);
+      if (_disposed || generation != _detailGeneration || selectedId != id) {
+        return;
+      }
+      final pending = result.hasMore || more
+          ? (await repository.materials(id, technicianId,
+                  status: MaterialStatus.pending))
+              .total
+          : result.items
+              .where((r) => r.status == MaterialStatus.pending)
+              .length;
+      if (_disposed || generation != _detailGeneration || selectedId != id) {
+        return;
+      }
+      final merged = {
+        if (more)
+          for (final r in requests) r.id: r
+      };
+      for (final request in result.items) {
+        merged[request.id] = request;
+      }
+      requests = merged.values.toList();
+      materialsPage = result;
+      pendingMaterials = pending;
+      materialsReady = true;
+    } catch (failure) {
+      if (!_disposed && generation == _detailGeneration) {
+        materialsError = _message(failure);
+        materialsReady = false;
+        if (failure is ApiException &&
+            [401, 403, 404].contains(failure.statusCode)) {
+          requests = [];
+        }
+      }
+    } finally {
+      if (!_disposed && generation == _detailGeneration) {
+        materialsLoading = false;
+        _notify();
+      }
+    }
+  }
+
+  Future<void> moreMaterials() async {
+    if (actionBusy ||
+        materialsLoading ||
+        materialsPage?.hasMore != true ||
+        selectedId == null) {
+      return;
+    }
+    await _loadMaterials(selectedId!, _detailGeneration, more: true);
+  }
+
+  Future<void> materialDetail(MaterialRequest request) async {
+    if (_disposed || actionBusy) return;
+    final generation = _detailGeneration;
+    actionBusy = true;
+    _notify();
+    try {
+      final result = await repository.materialDetail(request, technicianId);
+      if (!_disposed && generation == _detailGeneration) {
+        requests = requests.map((r) => r.id == result.id ? result : r).toList();
+      }
+    } catch (failure) {
+      if (!_disposed) materialsError = _message(failure);
+    } finally {
+      actionBusy = false;
+      _notify();
+    }
+  }
+
+  void acknowledgeMaterialReview() {
+    if (materialsReady && !mustRefresh && !actionBusy) {
+      materialReviewRequired = false;
+      _notify();
+    }
+  }
+
+  Future<bool> requestMaterials(MaterialDraft draft) async {
+    final order = selected;
+    if (order == null || !materialsReady || materialReviewRequired) {
+      return false;
+    }
+    return _materialChange(
+        () => repository.requestMaterials(order, draft, technicianId),
+        creating: true);
+  }
+
+  Future<bool> cancelMaterial(MaterialRequest request, String reason) =>
+      _materialChange(
+          () => repository.cancelMaterial(request, reason, technicianId));
+
+  Future<bool> _materialChange(Future<MaterialRequest> Function() operation,
+      {bool creating = false}) async {
+    if (_disposed ||
+        actionBusy ||
+        mustRefresh ||
+        detailLoading ||
+        selectedId == null) {
+      return false;
+    }
+    final id = selectedId!, generation = _detailGeneration;
+    actionBusy = true;
+    error = null;
+    _notify();
+    try {
+      await operation();
+      if (_disposed) return false;
+      await _loadMaterials(id, generation);
+      return true;
+    } catch (failure) {
+      if (_disposed) return false;
+      _failure(failure);
+      if (_uncertain(failure)) {
+        mustRefresh = true;
+        if (creating) materialReviewRequired = true;
+        error =
+            'Chưa xác nhận được kết quả. Tải lại công việc và kiểm tra danh sách yêu cầu trước khi gửi tiếp.';
+      }
+      if (failure is ApiException && [403, 404].contains(failure.statusCode)) {
+        selected = null;
+        selectedId = null;
+        requests = [];
+        materialsReady = false;
+        orders.removeWhere((order) => order.id == id);
+        listError = error;
+      }
+      return false;
+    } finally {
+      actionBusy = false;
+      _notify();
+    }
+  }
+
+  bool _uncertain(Object failure) =>
+      failure is! WorkOrderValidation &&
+      (failure is! ApiException ||
+          failure.statusCode == null ||
+          failure.statusCode == 409 ||
+          (failure.statusCode ?? 0) >= 500);
+
+  Future<bool> pause(String reason) => _change(null, pauseReason: reason);
+
+  bool get canFinish =>
+      materialsReady &&
+      !materialsLoading &&
+      pendingMaterials == 0 &&
+      !materialReviewRequired &&
+      !mustRefresh &&
+      !actionBusy &&
+      !detailLoading;
+
   Future<bool> start() => _change(null);
   Future<bool> complete(CompletionDraft draft) => _change(draft);
-  Future<bool> _change(CompletionDraft? draft) async {
+  Future<bool> _change(CompletionDraft? draft, {String? pauseReason}) async {
     final order = selected;
     if (_disposed ||
         actionBusy ||
@@ -117,17 +296,21 @@ class WorkOrderController extends ChangeNotifier {
         order == null) {
       return false;
     }
+    if (draft != null && !canFinish) return false;
     actionBusy = true;
     error = null;
     _notify();
     try {
-      final updated = draft == null
-          ? await repository.start(order, technicianId)
-          : await repository.complete(order, draft, technicianId);
+      final updated = pauseReason != null
+          ? await repository.pause(order, pauseReason, technicianId)
+          : draft == null
+              ? await repository.start(order, technicianId)
+              : await repository.complete(order, draft, technicianId);
       if (_disposed) return false;
       selected = updated;
       _replace(updated);
       mustRefresh = false;
+      await _loadMaterials(order.id, _detailGeneration);
       return true;
     } catch (failure) {
       if (_disposed) return false;
@@ -135,14 +318,9 @@ class WorkOrderController extends ChangeNotifier {
       if (draft != null &&
           failure is ApiException &&
           failure.statusCode == 422) {
-        error =
-            'Thông tin hoàn thành hoặc tồn kho đã thay đổi. Hãy kiểm tra lại báo cáo và phụ tùng.';
+        error = 'Thông tin hoàn thành chưa hợp lệ. Hãy kiểm tra lại báo cáo.';
       }
-      if (failure is! WorkOrderValidation &&
-          (failure is! ApiException ||
-              failure.statusCode == null ||
-              failure.statusCode == 409 ||
-              (failure.statusCode ?? 0) >= 500)) {
+      if (_uncertain(failure)) {
         mustRefresh = true;
         error =
             'Chưa xác nhận được kết quả thao tác. Hãy tải lại trạng thái công việc trước khi thử tiếp.';

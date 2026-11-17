@@ -1,36 +1,38 @@
-# SV05 — Ghi chú bàn giao mobile tuần 1–3
+# SV05 — Bàn giao mobile tuần 1–3
 
-**Cập nhật:** 13/11/2026. **Nhánh:** `feat/sv05-mobile-app`.
+**Cập nhật:** 15/11/2026. **Nhánh:** `feat/sv05-mobile-app`.
 
-## Đã hoàn thành trong mobile
+## Đã hoàn thành
 
-- Tổ chức Flutter theo các lớp `presentation`, `domain`, `data`.
-- Đăng nhập kỹ thuật viên bằng API thật; lưu token an toàn, khôi phục phiên, đăng xuất và xử lý lỗi/hết phiên.
-- Quét QR bằng camera, xin quyền camera, nhập mã thủ công; tra cứu thông tin và lịch sử thiết bị bằng API thật.
-- Danh sách Work Order, lọc 4 mức ưu tiên, phân trang và tải lại.
-- Chi tiết công việc; bắt đầu → `IN_PROGRESS`; nhập ghi chú, giờ làm, chọn phụ tùng/số lượng; xem lại và xác nhận → `COMPLETED`.
-- Kiểm tra dữ liệu nhập, giữ bản nháp khi chọn phụ tùng, hỏi trước khi bỏ thay đổi; chống gửi lặp và yêu cầu đọc lại trạng thái khi chưa rõ kết quả gửi.
-- Tách adapter API và dữ liệu mẫu có nhãn; không tự chuyển sang mẫu khi API lỗi.
-- Cấu hình quyền camera, bảo vệ token và build Android; chuẩn bị cấu hình iOS.
-- Bổ sung unit/widget test, công cụ kiểm tra API/Android, hướng dẫn chạy và hợp đồng API đề xuất với SV03.
+- Đã lấy và gộp develop `96fb8bd` vào nhánh SV05 ở máy, dùng backend Work Order của SV03 từ `63665f2`. Không tự sửa mã backend.
+- Flutter chia presentation/domain/data; đăng nhập TECHNICIAN, lưu token an toàn, khôi phục phiên và đăng xuất.
+- Camera QR/nhập mã thủ công; tra cứu thông tin và lịch sử thiết bị bằng API thật.
+- Work Order thật: danh sách/lọc 4 ưu tiên/phân trang, chi tiết, bắt đầu, tạm dừng có lý do, tiếp tục và nhận công việc Cần sửa lại.
+- Yêu cầu vật tư: tìm/chọn/số lượng, gửi PENDING, xem trạng thái/chi tiết/lý do, hủy yêu cầu. Thủ kho/Admin duyệt ngoài app kỹ thuật viên; Flutter chỉ đọc vật tư đã cấp.
+- Hoàn thành qua endpoint riêng: nguyên nhân, cách xử lý, ghi chú; giờ sửa do server tính. Không gửi lại vật tư hoặc trừ kho thêm lúc hoàn thành. Kết quả COMPLETED/CLOSED chỉ đọc.
+- Giữ bản nháp khi chọn vật tư/tải lại; hỏi trước khi bỏ thay đổi, chống bấm lặp. Mất phản hồi khi tạo yêu cầu phải tải lại, kiểm tra danh sách và xác nhận bản nháp mới.
+- Chặn hoàn thành nếu còn PENDING (kể cả trang sau) hoặc chưa đọc được trạng thái vật tư.
+- Cập nhật hướng dẫn demo, tài liệu API thực tế và công cụ tạo fixture/duyệt vật tư thử.
 
-## Kết quả đã kiểm tra
+## Kết quả kiểm tra
 
-- `flutter analyze`: không có vấn đề; `flutter test`: **75 kiểm thử đạt**.
-- Build/cài APK debug trên giả lập Android API 36.
-- Đăng nhập bằng backend thật, khôi phục phiên, đăng xuất; camera quét QR thử và tra cứu đúng thiết bị.
-- **6 bước Work Order mẫu đạt trên Android**: danh sách có nhãn, lọc, bắt đầu, giữ báo cáo/phụ tùng, hoàn thành, mở lại kết quả chỉ đọc.
-- API `work-orders/my-tasks` hiện trả **404**; danh mục `parts` trả **200**. Chưa nghiệm thu cập nhật Work Order/tồn kho thật.
+- `flutter analyze`: không có vấn đề; **81 Flutter tests đạt**.
+- **45 backend tests có sẵn của SV03 đạt**, gồm PostgreSQL trong schema ngẫu nhiên riêng và kiểm tra khóa/rollback/phân quyền.
+- **6 nhóm kiểm tra Work Order qua API thật đạt**: danh sách, bắt đầu/tạm dừng/tiếp tục, chặn PENDING, duyệt đúng quyền/chống xuất lặp, hoàn thành và vòng sửa lại/nghiệm thu.
+- **4 kiểm tra API tài sản/QR thật đạt** sau cập nhật backend.
+- Hai APK debug đã build thành công: bản API thật và bản mẫu trong bộ nhớ.
+- **7 bước Android API thật đạt** trên AOSP Android 11/API 30: danh sách/lọc ưu tiên → bắt đầu → gửi PENDING không trừ kho → chặn hoàn thành khi chờ duyệt → cập nhật vật tư đã cấp và giữ báo cáo → hoàn thành, lưu báo cáo/vật tư không trừ kho lần nữa → đóng tiến trình và mở lại vẫn xem kết quả chỉ đọc.
+- Báo cáo `build/verification/work-orders-android-report.json` có `mode: live-api`, `status: passed`, `liveWorkOrderIntegrationAccepted: true` và SHA-256 khớp APK đã cài. Lần kiểm tra này không có cảnh báo System UI; tồn phụ tùng thử từ 18 xuống 16 đúng một lần cấp 2 đơn vị. Ảnh minh chứng có tiền tố `work-order-live-` trong cùng thư mục.
+- my-tasks và parts trả **200**. Kết quả 404 ngày 13/11 là của backend cũ, đã được thay bằng báo cáo mới.
 
-## Còn chờ / chưa thuộc phần hoàn thành
+## Database và giới hạn
 
-- SV03 xác nhận và triển khai [hợp đồng API Work Order đề xuất](work_order_api_contract.md), sau đó kiểm tra tích hợp thật và xử lý đồng thời/trừ kho nguyên tử.
-- SQLite, hàng đợi UUID, đồng bộ và conflict offline: **chưa triển khai**, thuộc tuần 4–5. Bản nháp/công việc mẫu hiện chỉ nằm trong bộ nhớ.
-- iOS mới có cấu hình; **chưa build/kiểm thử trên macOS**. Chưa kiểm thử trên điện thoại thật.
-- Không thay đổi mã nguồn backend/database trong đợt bàn giao này.
+- Đã sao lưu `smart_cmms_mobile_dev` trước khi áp dụng 3 migration SV03: status history → material requests → completion. Backup/báo cáo nằm trong `mobile/build/verification/`, được Git bỏ qua.
+- Các thử nghiệm ghi dữ liệu có nhãn SV05 vào database riêng; có giao dịch xuất kho thử qua API. Không chạy trên database dùng chung/sản xuất.
+- SQLite, hàng đợi UUID và đồng bộ/conflict offline **chưa triển khai** (tuần 4–5). Bản nháp chưa lưu bền khi đóng tiến trình app.
+- iOS mới có cấu hình, **chưa build/kiểm thử trên macOS**; chưa kiểm thử điện thoại thật.
+- `.env`, mật khẩu/token, APK, ảnh, backup và báo cáo build không đưa vào Git.
 
-## Chạy và kiểm tra lại
+**Kết luận tuần 3:** đã hoàn thành luồng mobile trực tuyến bằng API thật hiện có của SV03; chưa cần bổ sung endpoint cho các chức năng tuần 3 đã nêu. Lead có thể kiểm tra thay đổi mobile trên nhánh SV05 trước khi gộp vào develop.
 
-- Hướng dẫn ngắn cho máy hiện tại: [HUONG_DAN_DEMO.md](../HUONG_DAN_DEMO.md).
-- Cài đặt, lệnh build hai APK và các script kiểm tra: [README.md](../README.md).
-- `.env`, mật khẩu/token, APK, ảnh và báo cáo trong `build/` không đưa vào Git. Máy khác cần cấu hình backend/tài khoản riêng, rồi build và chạy lại các công cụ để tạo minh chứng.
+Chạy lại theo [HUONG_DAN_DEMO.md](../HUONG_DAN_DEMO.md), xem [API hiện tại](work_order_api_contract.md) và [README.md](../README.md).

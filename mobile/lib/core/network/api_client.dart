@@ -32,8 +32,9 @@ class ApiClient {
           {String? token}) =>
       _request('PATCH', path, body: body, token: token);
 
-  Future<Object?> post(String path, Map<String, Object?> body) =>
-      _request('POST', path, body: body);
+  Future<Object?> post(String path, Map<String, Object?> body,
+          {String? token}) =>
+      _request('POST', path, body: body, token: token);
 
   Future<Object?> _request(
     String method,
