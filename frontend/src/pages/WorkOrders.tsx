@@ -1,243 +1,307 @@
 import { useState } from "react";
 import {
-  Plus,
+  Search,
+  Filter,
   LayoutGrid,
-  List as ListIcon,
-  UserCheck,
-  Clock,
+  List,
+  Plus,
   X,
+  Wrench,
+  UserCheck,
 } from "lucide-react";
+
+interface UsedPart {
+  partId: string;
+  name: string;
+  qty: number;
+}
 
 interface WorkOrder {
   id: string;
   title: string;
   assetName: string;
-  priority: "HIGH" | "MEDIUM" | "LOW";
-  assignee: string;
   status: "OPEN" | "ASSIGNED" | "IN_PROGRESS" | "COMPLETED" | "CLOSED";
-  dueDate: string;
-  partUsed?: string;
+  priority: "LOW" | "MEDIUM" | "HIGH";
+  createdAt: string;
+  assignee: string;
+  usedParts: UsedPart[];
 }
 
+const initialWorkOrders: WorkOrder[] = Array.from({ length: 1000 }, (_, i) => {
+  const statuses: WorkOrder["status"][] = [
+    "OPEN",
+    "ASSIGNED",
+    "IN_PROGRESS",
+    "COMPLETED",
+    "CLOSED",
+  ];
+  const priorities: WorkOrder["priority"][] = ["LOW", "MEDIUM", "HIGH"];
+  return {
+    id: `WO-${1000 + i + 1}`,
+    title: `Bảo trì & Sửa chữa thiết bị #${(i % 300) + 1}`,
+    assetName: `Thiết bị công nghiệp #${(i % 300) + 1}`,
+    status: statuses[i % statuses.length],
+    priority: priorities[i % priorities.length],
+    createdAt: `2026-11-${((i % 28) + 1).toString().padStart(2, "0")}`,
+    assignee: `Kỹ thuật viên ${(i % 5) + 1}`,
+    usedParts:
+      i % 2 === 0
+        ? [
+            { partId: "PRT-01", name: "Vòng bi SKF 6205", qty: 2 },
+            { partId: "PRT-03", name: "Dầu thủy lực ISO VG 68", qty: 5 },
+          ]
+        : [{ partId: "PRT-02", name: "Lọc gió máy nén khí", qty: 1 }],
+  };
+});
+
 export default function WorkOrders() {
-  const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [orders, setOrders] = useState<WorkOrder[]>(initialWorkOrders);
+  const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
 
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([
-    {
-      id: "WO-101",
-      title: "Thay bộ lọc dầu định kỳ",
-      assetName: "Máy nén khí Piston 15HP",
-      priority: "HIGH",
-      assignee: "Chưa phân công",
-      status: "OPEN",
-      dueDate: "2026-11-05",
-    },
-    {
-      id: "WO-102",
-      title: "Cân chỉnh dây curoa",
-      assetName: "Băng tải đóng gói SP-02",
-      priority: "MEDIUM",
-      assignee: "Nguyễn Văn A",
-      status: "ASSIGNED",
-      dueDate: "2026-11-06",
-    },
-    {
-      id: "WO-103",
-      title: "Sửa lỗi cảm biến nhiệt độ",
-      assetName: "Lò nhiệt luyện L-01",
-      priority: "HIGH",
-      assignee: "Trần Văn B",
-      status: "IN_PROGRESS",
-      dueDate: "2026-11-04",
-      partUsed: "Cảm biến nhiệt PT100",
-    },
-    {
-      id: "WO-104",
-      title: "Tra mỡ vòng bi ổ trục",
-      assetName: "Máy quạt hút công nghiệp",
-      priority: "LOW",
-      assignee: "Lê Văn C",
-      status: "COMPLETED",
-      dueDate: "2026-11-02",
-      partUsed: "Mỡ bôi trơn SKF",
-    },
-    {
-      id: "WO-105",
-      title: "Bảo dưỡng tổng thể quý 3",
-      assetName: "Máy phay CNC 5 trục",
-      priority: "MEDIUM",
-      assignee: "Nguyễn Văn A",
-      status: "CLOSED",
-      dueDate: "2026-10-28",
-    },
-  ]);
+  // State Modal Tạo Phiếu Mới
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newAsset, setNewAsset] = useState("Thiết bị công nghiệp #1");
+  const [newPriority, setNewPriority] = useState<WorkOrder["priority"]>("HIGH");
+  const [newAssignee, setNewAssignee] = useState("Kỹ thuật viên 1");
 
-  const [newWO, setNewWO] = useState({
-    title: "",
-    assetName: "",
-    priority: "MEDIUM" as "HIGH" | "MEDIUM" | "LOW",
-    assignee: "",
-    partUsed: "",
+  // State Modal Chi Tiết & Phân Công
+  const [selectedWO, setSelectedWO] = useState<WorkOrder | null>(null);
+
+  const filteredOrders = orders.filter((wo) => {
+    const matchSearch =
+      wo.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      wo.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      wo.assetName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchStatus = statusFilter === "ALL" || wo.status === statusFilter;
+    return matchSearch && matchStatus;
   });
+
+  const totalPages = Math.ceil(filteredOrders.length / pageSize);
+  const paginatedOrders = filteredOrders.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
+  );
 
   const handleCreateWO = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newWO.title || !newWO.assetName) return;
-
-    const createdItem: WorkOrder = {
-      id: `WO-${100 + workOrders.length + 1}`,
-      title: newWO.title,
-      assetName: newWO.assetName,
-      priority: newWO.priority,
-      assignee: newWO.assignee || "Chưa phân công",
-      status: newWO.assignee ? "ASSIGNED" : "OPEN",
-      dueDate: new Date().toISOString().split("T")[0],
-      partUsed: newWO.partUsed,
+    const created: WorkOrder = {
+      id: `WO-${1000 + orders.length + 1}`,
+      title: newTitle,
+      assetName: newAsset,
+      status: "OPEN",
+      priority: newPriority,
+      createdAt: "2026-11-17",
+      assignee: newAssignee,
+      usedParts: [],
     };
-
-    setWorkOrders([createdItem, ...workOrders]);
-    setIsModalOpen(false);
-    setNewWO({
-      title: "",
-      assetName: "",
-      priority: "MEDIUM",
-      assignee: "",
-      partUsed: "",
-    });
+    setOrders([created, ...orders]);
+    setShowCreateModal(false);
+    setNewTitle("");
   };
 
-  const kanbanColumns = [
-    { key: "OPEN", label: "Mới tạo (Open)", color: "#64748b", bg: "#f1f5f9" },
-    {
-      key: "ASSIGNED",
-      label: "Đã giao (Assigned)",
-      color: "#0284c7",
-      bg: "#e0f2fe",
-    },
-    {
-      key: "IN_PROGRESS",
-      label: "Đang xử lý (In Progress)",
-      color: "#d97706",
-      bg: "#fef3c7",
-    },
-    {
-      key: "COMPLETED",
-      label: "Đã hoàn thành (Completed)",
-      color: "#16a34a",
-      bg: "#dcfce7",
-    },
-    {
-      key: "CLOSED",
-      label: "Đã nghiệm thu (Closed)",
-      color: "#475569",
-      bg: "#e2e8f0",
-    },
-  ];
+  const handleUpdateWO = (
+    id: string,
+    updatedAssignee: string,
+    updatedStatus: WorkOrder["status"],
+  ) => {
+    setOrders((prev) =>
+      prev.map((wo) =>
+        wo.id === id
+          ? { ...wo, assignee: updatedAssignee, status: updatedStatus }
+          : wo,
+      ),
+    );
+    setSelectedWO(null);
+  };
+
+  const columns: { key: WorkOrder["status"]; label: string; color: string }[] =
+    [
+      { key: "OPEN", label: "Mới ghi nhận (OPEN)", color: "#64748b" },
+      { key: "ASSIGNED", label: "Đã phân công", color: "#0284c7" },
+      { key: "IN_PROGRESS", label: "Đang sửa chữa", color: "#d97706" },
+      { key: "COMPLETED", label: "Đã hoàn thành", color: "#16a34a" },
+      { key: "CLOSED", label: "Đã nghiệm thu", color: "#475569" },
+    ];
 
   return (
-    <div style={{ paddingBottom: "30px" }}>
+    <div>
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           marginBottom: "20px",
-          flexWrap: "wrap",
-          gap: "12px",
         }}
       >
         <div>
           <h2 style={{ margin: 0, color: "#0f172a" }}>
-            Quản lý Phiếu bảo trì (Work Orders)
+            Quản lý Work Orders ({orders.length} phiếu)
           </h2>
           <p
             style={{ margin: "4px 0 0 0", color: "#64748b", fontSize: "14px" }}
           >
-            Theo dõi và phân công công việc bảo trì cho kỹ thuật viên
+            Bấm vào thẻ phiếu để phân công kỹ thuật viên & xem phụ tùng sử dụng
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-          <div
-            style={{
-              background: "#e2e8f0",
-              padding: "3px",
-              borderRadius: "8px",
-              display: "flex",
-            }}
-          >
-            <button
-              onClick={() => setViewMode("kanban")}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "6px 12px",
-                border: "none",
-                borderRadius: "6px",
-                background: viewMode === "kanban" ? "#fff" : "transparent",
-                color: viewMode === "kanban" ? "#0284c7" : "#64748b",
-                fontWeight: "bold",
-                cursor: "pointer",
-                boxShadow:
-                  viewMode === "kanban" ? "0 1px 2px rgba(0,0,0,0.1)" : "none",
-              }}
-            >
-              <LayoutGrid size={16} /> Kanban
-            </button>
-            <button
-              onClick={() => setViewMode("table")}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "6px 12px",
-                border: "none",
-                borderRadius: "6px",
-                background: viewMode === "table" ? "#fff" : "transparent",
-                color: viewMode === "table" ? "#0284c7" : "#64748b",
-                fontWeight: "bold",
-                cursor: "pointer",
-                boxShadow:
-                  viewMode === "table" ? "0 1px 2px rgba(0,0,0,0.1)" : "none",
-              }}
-            >
-              <ListIcon size={16} /> Danh sách
-            </button>
-          </div>
-
+        <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => setShowCreateModal(true)}
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "8px",
-              padding: "10px 16px",
+              gap: "6px",
+              padding: "8px 14px",
               background: "#0284c7",
               color: "#fff",
               border: "none",
               borderRadius: "6px",
               cursor: "pointer",
               fontWeight: "bold",
+              fontSize: "13px",
             }}
           >
-            <Plus size={18} /> Tạo phiếu mới
+            <Plus size={16} /> Tạo phiếu mới
           </button>
+
+          <div
+            style={{
+              display: "flex",
+              gap: "8px",
+              background: "#e2e8f0",
+              padding: "4px",
+              borderRadius: "6px",
+            }}
+          >
+            <button
+              onClick={() => setViewMode("kanban")}
+              style={{
+                padding: "6px 12px",
+                border: "none",
+                borderRadius: "4px",
+                background: viewMode === "kanban" ? "#fff" : "transparent",
+                cursor: "pointer",
+                fontWeight: "bold",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
+              <LayoutGrid size={16} /> Kanban
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              style={{
+                padding: "6px 12px",
+                border: "none",
+                borderRadius: "4px",
+                background: viewMode === "list" ? "#fff" : "transparent",
+                cursor: "pointer",
+                fontWeight: "bold",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
+              <List size={16} /> Danh sách
+            </button>
+          </div>
         </div>
       </div>
 
+      {/* Thanh lọc */}
+      <div
+        style={{
+          display: "flex",
+          gap: "12px",
+          marginBottom: "16px",
+          background: "#fff",
+          padding: "16px",
+          borderRadius: "8px",
+          border: "1px solid #e2e8f0",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            background: "#f8fafc",
+            padding: "8px 12px",
+            borderRadius: "6px",
+            flex: 1,
+            border: "1px solid #cbd5e1",
+          }}
+        >
+          <Search size={18} color="#64748b" />
+          <input
+            type="text"
+            placeholder="Tìm phiếu, thiết bị..."
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
+            style={{
+              border: "none",
+              outline: "none",
+              background: "transparent",
+              width: "100%",
+            }}
+          />
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            background: "#f8fafc",
+            padding: "8px 12px",
+            borderRadius: "6px",
+            border: "1px solid #cbd5e1",
+          }}
+        >
+          <Filter size={18} color="#64748b" />
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            style={{
+              border: "none",
+              outline: "none",
+              background: "transparent",
+            }}
+          >
+            <option value="ALL">Tất cả trạng thái</option>
+            <option value="OPEN">OPEN</option>
+            <option value="ASSIGNED">ASSIGNED</option>
+            <option value="IN_PROGRESS">IN_PROGRESS</option>
+            <option value="COMPLETED">COMPLETED</option>
+            <option value="CLOSED">CLOSED</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Chế độ Kanban */}
       {viewMode === "kanban" ? (
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: "16px",
-            alignItems: "start",
+            gridTemplateColumns: "repeat(5, 1fr)",
+            gap: "12px",
+            overflowX: "auto",
+            minHeight: "500px",
           }}
         >
-          {kanbanColumns.map((col) => {
-            const filteredOrders = workOrders.filter(
+          {columns.map((col) => {
+            const colOrders = filteredOrders.filter(
               (wo) => wo.status === col.key,
             );
             return (
@@ -245,8 +309,8 @@ export default function WorkOrders() {
                 key={col.key}
                 style={{
                   background: "#f8fafc",
-                  borderRadius: "8px",
                   padding: "12px",
+                  borderRadius: "8px",
                   border: "1px solid #e2e8f0",
                 }}
               >
@@ -256,185 +320,105 @@ export default function WorkOrders() {
                     justifyContent: "space-between",
                     alignItems: "center",
                     marginBottom: "12px",
-                    borderBottom: `2px solid ${col.color}`,
-                    paddingBottom: "8px",
                   }}
                 >
                   <span
                     style={{
                       fontWeight: "bold",
-                      color: "#334155",
-                      fontSize: "14px",
+                      fontSize: "13px",
+                      color: col.color,
                     }}
                   >
                     {col.label}
                   </span>
                   <span
                     style={{
-                      background: col.bg,
-                      color: col.color,
+                      background: "#e2e8f0",
                       padding: "2px 8px",
-                      borderRadius: "12px",
+                      borderRadius: "10px",
                       fontSize: "12px",
-                      fontWeight: "bold",
                     }}
                   >
-                    {filteredOrders.length}
+                    {colOrders.length}
                   </span>
                 </div>
-
                 <div
                   style={{
                     display: "flex",
                     flexDirection: "column",
-                    gap: "10px",
+                    gap: "8px",
                   }}
                 >
-                  {filteredOrders.map((item) => (
+                  {colOrders.slice(0, 15).map((wo) => (
                     <div
-                      key={item.id}
+                      key={wo.id}
+                      onClick={() => setSelectedWO(wo)}
                       style={{
                         background: "#fff",
-                        padding: "12px",
+                        padding: "10px",
                         borderRadius: "6px",
                         border: "1px solid #cbd5e1",
                         boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+                        cursor: "pointer",
                       }}
                     >
                       <div
                         style={{
                           display: "flex",
                           justifyContent: "space-between",
-                          marginBottom: "6px",
+                          marginBottom: "4px",
                         }}
                       >
                         <span
                           style={{
-                            fontSize: "12px",
                             fontWeight: "bold",
                             color: "#0284c7",
+                            fontSize: "12px",
                           }}
                         >
-                          {item.id}
+                          {wo.id}
                         </span>
                         <span
                           style={{
                             fontSize: "10px",
-                            fontWeight: "bold",
                             padding: "2px 6px",
                             borderRadius: "4px",
                             background:
-                              item.priority === "HIGH"
-                                ? "#fee2e2"
-                                : item.priority === "MEDIUM"
-                                  ? "#fef3c7"
-                                  : "#e0f2fe",
+                              wo.priority === "HIGH" ? "#fee2e2" : "#f1f5f9",
                             color:
-                              item.priority === "HIGH"
-                                ? "#b91c1c"
-                                : item.priority === "MEDIUM"
-                                  ? "#b45309"
-                                  : "#0369a1",
+                              wo.priority === "HIGH" ? "#dc2626" : "#475569",
                           }}
                         >
-                          {item.priority}
+                          {wo.priority}
                         </span>
                       </div>
-
-                      <h4
-                        style={{
-                          margin: "0 0 6px 0",
-                          fontSize: "14px",
-                          color: "#0f172a",
-                        }}
-                      >
-                        {item.title}
-                      </h4>
                       <p
                         style={{
-                          margin: "0 0 8px 0",
-                          fontSize: "12px",
-                          color: "#64748b",
+                          margin: "0 0 6px 0",
+                          fontSize: "13px",
+                          fontWeight: "500",
                         }}
                       >
-                        🛠️ {item.assetName}
+                        {wo.title}
                       </p>
-
-                      {item.partUsed && (
-                        <p
-                          style={{
-                            margin: "0 0 8px 0",
-                            fontSize: "11px",
-                            color: "#475569",
-                            background: "#f1f5f9",
-                            padding: "2px 6px",
-                            borderRadius: "4px",
-                          }}
-                        >
-                          📦 Linh kiện: {item.partUsed}
-                        </p>
-                      )}
-
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          borderTop: "1px solid #f1f5f9",
-                          paddingTop: "8px",
-                          fontSize: "12px",
-                          color: "#64748b",
-                        }}
-                      >
-                        <span
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "4px",
-                          }}
-                        >
-                          <UserCheck size={14} /> {item.assignee}
-                        </span>
-                        <span
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "4px",
-                          }}
-                        >
-                          <Clock size={14} /> {item.dueDate}
-                        </span>
-                      </div>
+                      <span style={{ fontSize: "11px", color: "#64748b" }}>
+                        KTV: {wo.assignee}
+                      </span>
                     </div>
                   ))}
-
-                  {filteredOrders.length === 0 && (
-                    <div
-                      style={{
-                        padding: "20px",
-                        textAlign: "center",
-                        color: "#94a3b8",
-                        fontSize: "13px",
-                        border: "1px dashed #cbd5e1",
-                        borderRadius: "6px",
-                      }}
-                    >
-                      Không có phiếu nào
-                    </div>
-                  )}
                 </div>
               </div>
             );
           })}
         </div>
       ) : (
+        /* Chế độ Danh sách */
         <div
           style={{
             background: "#fff",
             borderRadius: "8px",
             border: "1px solid #e2e8f0",
-            overflow: "hidden",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+            overflowX: "auto",
           }}
         >
           <table
@@ -450,96 +434,99 @@ export default function WorkOrders() {
                   background: "#f8fafc",
                   borderBottom: "1px solid #e2e8f0",
                   color: "#475569",
-                  fontSize: "14px",
+                  fontSize: "13px",
                 }}
               >
-                <th style={{ padding: "12px 16px" }}>Mã phiếu</th>
-                <th style={{ padding: "12px 16px" }}>Nội dung công việc</th>
-                <th style={{ padding: "12px 16px" }}>Thiết bị</th>
-                <th style={{ padding: "12px 16px" }}>Mức ưu tiên</th>
-                <th style={{ padding: "12px 16px" }}>Kỹ thuật viên</th>
-                <th style={{ padding: "12px 16px" }}>Trạng thái</th>
-                <th style={{ padding: "12px 16px" }}>Hạn hoàn thành</th>
+                <th style={{ padding: "12px" }}>Mã phiếu</th>
+                <th style={{ padding: "12px" }}>Tên sự cố</th>
+                <th style={{ padding: "12px" }}>Thiết bị</th>
+                <th style={{ padding: "12px" }}>Độ ưu tiên</th>
+                <th style={{ padding: "12px" }}>Trạng thái</th>
+                <th style={{ padding: "12px" }}>Người thực hiện</th>
               </tr>
             </thead>
             <tbody>
-              {workOrders.map((item) => (
+              {paginatedOrders.map((wo) => (
                 <tr
-                  key={item.id}
+                  key={wo.id}
+                  onClick={() => setSelectedWO(wo)}
                   style={{
-                    borderBottom: "1px solid #e2e8f0",
+                    borderBottom: "1px solid #f1f5f9",
                     fontSize: "14px",
+                    cursor: "pointer",
                   }}
                 >
                   <td
                     style={{
-                      padding: "12px 16px",
+                      padding: "12px",
                       fontWeight: "bold",
                       color: "#0284c7",
                     }}
                   >
-                    {item.id}
+                    {wo.id}
                   </td>
-                  <td style={{ padding: "12px 16px", fontWeight: "500" }}>
-                    {item.title}
+                  <td style={{ padding: "12px" }}>{wo.title}</td>
+                  <td style={{ padding: "12px", color: "#64748b" }}>
+                    {wo.assetName}
                   </td>
-                  <td style={{ padding: "12px 16px", color: "#475569" }}>
-                    {item.assetName}
-                  </td>
-                  <td style={{ padding: "12px 16px" }}>
+                  <td style={{ padding: "12px" }}>
                     <span
                       style={{
-                        padding: "4px 8px",
+                        padding: "2px 8px",
                         borderRadius: "4px",
                         fontSize: "12px",
-                        fontWeight: "bold",
                         background:
-                          item.priority === "HIGH"
-                            ? "#fee2e2"
-                            : item.priority === "MEDIUM"
-                              ? "#fef3c7"
-                              : "#e0f2fe",
-                        color:
-                          item.priority === "HIGH"
-                            ? "#b91c1c"
-                            : item.priority === "MEDIUM"
-                              ? "#b45309"
-                              : "#0369a1",
+                          wo.priority === "HIGH" ? "#fee2e2" : "#f1f5f9",
+                        color: wo.priority === "HIGH" ? "#dc2626" : "#475569",
                       }}
                     >
-                      {item.priority === "HIGH"
-                        ? "Cao"
-                        : item.priority === "MEDIUM"
-                          ? "Trung bình"
-                          : "Thấp"}
+                      {wo.priority}
                     </span>
                   </td>
-                  <td style={{ padding: "12px 16px" }}>{item.assignee}</td>
-                  <td style={{ padding: "12px 16px" }}>
-                    <span
-                      style={{
-                        padding: "4px 8px",
-                        borderRadius: "4px",
-                        fontSize: "12px",
-                        fontWeight: "bold",
-                        background: "#f1f5f9",
-                        color: "#334155",
-                      }}
-                    >
-                      {item.status}
-                    </span>
+                  <td style={{ padding: "12px", fontWeight: "bold" }}>
+                    {wo.status}
                   </td>
-                  <td style={{ padding: "12px 16px", color: "#64748b" }}>
-                    {item.dueDate}
+                  <td style={{ padding: "12px", color: "#64748b" }}>
+                    {wo.assignee}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "12px 16px",
+              borderTop: "1px solid #e2e8f0",
+            }}
+          >
+            <span style={{ fontSize: "13px", color: "#64748b" }}>
+              Trang {currentPage} / {totalPages || 1}
+            </span>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((p) => p - 1)}
+                style={{ padding: "6px 12px" }}
+              >
+                Trước
+              </button>
+              <button
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((p) => p + 1)}
+                style={{ padding: "6px 12px" }}
+              >
+                Sau
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {isModalOpen && (
+      {/* Modal Tạo Phiếu Mới */}
+      {showCreateModal && (
         <div
           style={{
             position: "fixed",
@@ -549,238 +536,405 @@ export default function WorkOrders() {
             bottom: 0,
             background: "rgba(0,0,0,0.5)",
             display: "flex",
-            alignItems: "center",
             justifyContent: "center",
+            alignItems: "center",
+            zIndex: 1000,
+          }}
+        >
+          <form
+            onSubmit={handleCreateWO}
+            style={{
+              background: "#fff",
+              padding: "24px",
+              borderRadius: "10px",
+              width: "400px",
+            }}
+          >
+            <h3 style={{ marginTop: 0 }}>
+              Tạo Phiếu Công Việc Mới (Work Order)
+            </h3>
+            <div style={{ marginBottom: "12px" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "13px",
+                  marginBottom: "4px",
+                }}
+              >
+                Mô tả sự cố / công việc
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="VD: Thay vòng bi trục chính..."
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px",
+                  borderRadius: "4px",
+                  border: "1px solid #cbd5e1",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div style={{ marginBottom: "12px" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "13px",
+                  marginBottom: "4px",
+                }}
+              >
+                Thiết bị gặp sự cố
+              </label>
+              <input
+                type="text"
+                required
+                value={newAsset}
+                onChange={(e) => setNewAsset(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px",
+                  borderRadius: "4px",
+                  border: "1px solid #cbd5e1",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "10px",
+                marginBottom: "16px",
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "13px",
+                    marginBottom: "4px",
+                  }}
+                >
+                  Mức độ ưu tiên
+                </label>
+                <select
+                  value={newPriority}
+                  onChange={(e) =>
+                    setNewPriority(e.target.value as WorkOrder["priority"])
+                  }
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #cbd5e1",
+                  }}
+                >
+                  <option value="HIGH">HIGH (Khẩn cấp)</option>
+                  <option value="MEDIUM">MEDIUM (Trung bình)</option>
+                  <option value="LOW">LOW (Thấp)</option>
+                </select>
+              </div>
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "13px",
+                    marginBottom: "4px",
+                  }}
+                >
+                  Phân công KTV
+                </label>
+                <select
+                  value={newAssignee}
+                  onChange={(e) => setNewAssignee(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #cbd5e1",
+                  }}
+                >
+                  <option value="Kỹ thuật viên 1">Kỹ thuật viên 1</option>
+                  <option value="Kỹ thuật viên 2">Kỹ thuật viên 2</option>
+                  <option value="Kỹ thuật viên 3">Kỹ thuật viên 3</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                type="submit"
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  background: "#0284c7",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                Tạo phiếu
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  background: "#e2e8f0",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                }}
+              >
+                Hủy
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal Chi Tiết Phiếu, Phân Công KTV & Phụ Tùng Sử Dụng */}
+      {selectedWO && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
             zIndex: 1000,
           }}
         >
           <div
             style={{
               background: "#fff",
-              borderRadius: "8px",
-              width: "100%",
-              maxWidth: "500px",
               padding: "24px",
-              boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+              borderRadius: "10px",
+              width: "450px",
+              position: "relative",
             }}
           >
-            <div
+            <button
+              onClick={() => setSelectedWO(null)}
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "20px",
+                position: "absolute",
+                top: "14px",
+                right: "14px",
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
               }}
             >
-              <h3 style={{ margin: 0, color: "#0f172a" }}>
-                Tạo phiếu bảo trì mới
-              </h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
+              <X size={20} />
+            </button>
+
+            <span
+              style={{ fontSize: "12px", fontWeight: "bold", color: "#0284c7" }}
+            >
+              {selectedWO.id} • Ngày tạo: {selectedWO.createdAt}
+            </span>
+            <h3 style={{ margin: "4px 0 8px 0" }}>{selectedWO.title}</h3>
+            <p
+              style={{
+                margin: "0 0 16px 0",
+                fontSize: "13px",
+                color: "#64748b",
+              }}
+            >
+              Thiết bị: <strong>{selectedWO.assetName}</strong>
+            </p>
+
+            {/* Phân công KTV & Cập nhật trạng thái */}
+            <div
+              style={{
+                background: "#f8fafc",
+                padding: "12px",
+                borderRadius: "8px",
+                marginBottom: "16px",
+                border: "1px solid #e2e8f0",
+              }}
+            >
+              <div
                 style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "#64748b",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  fontWeight: "bold",
+                  fontSize: "13px",
+                  marginBottom: "10px",
                 }}
               >
-                <X size={20} />
-              </button>
-            </div>
-
-            <form
-              onSubmit={handleCreateWO}
-              style={{ display: "flex", flexDirection: "column", gap: "16px" }}
-            >
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "14px",
-                    fontWeight: "bold",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Tên công việc / Sự cố *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ví dụ: Kiểm tra chảy dầu máy nén khí"
-                  value={newWO.title}
-                  onChange={(e) =>
-                    setNewWO({ ...newWO, title: e.target.value })
-                  }
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "6px",
-                    boxSizing: "border-box",
-                  }}
-                />
+                <UserCheck size={16} color="#0284c7" /> Điều phối & Trạng thái
+                xử lý
               </div>
-
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "14px",
-                    fontWeight: "bold",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Thiết bị áp dụng *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ví dụ: Máy phay CNC 5 trục"
-                  value={newWO.assetName}
-                  onChange={(e) =>
-                    setNewWO({ ...newWO, assetName: e.target.value })
-                  }
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "6px",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
               <div
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1fr 1fr",
-                  gap: "12px",
+                  gap: "10px",
                 }}
               >
                 <div>
                   <label
                     style={{
+                      fontSize: "12px",
+                      color: "#64748b",
                       display: "block",
-                      fontSize: "14px",
-                      fontWeight: "bold",
-                      marginBottom: "6px",
+                      marginBottom: "4px",
                     }}
                   >
-                    Mức độ ưu tiên
+                    Kỹ thuật viên phụ trách
                   </label>
                   <select
-                    value={newWO.priority}
+                    value={selectedWO.assignee}
                     onChange={(e) =>
-                      setNewWO({ ...newWO, priority: e.target.value as any })
+                      setSelectedWO({ ...selectedWO, assignee: e.target.value })
                     }
                     style={{
                       width: "100%",
-                      padding: "8px 12px",
+                      padding: "6px",
+                      borderRadius: "4px",
                       border: "1px solid #cbd5e1",
-                      borderRadius: "6px",
-                      background: "#fff",
                     }}
                   >
-                    <option value="LOW">Thấp (Low)</option>
-                    <option value="MEDIUM">Trung bình (Medium)</option>
-                    <option value="HIGH">Cao (High)</option>
+                    <option value="Kỹ thuật viên 1">Kỹ thuật viên 1</option>
+                    <option value="Kỹ thuật viên 2">Kỹ thuật viên 2</option>
+                    <option value="Kỹ thuật viên 3">Kỹ thuật viên 3</option>
+                    <option value="Kỹ thuật viên 4">Kỹ thuật viên 4</option>
+                    <option value="Kỹ thuật viên 5">Kỹ thuật viên 5</option>
                   </select>
                 </div>
-
                 <div>
                   <label
                     style={{
+                      fontSize: "12px",
+                      color: "#64748b",
                       display: "block",
-                      fontSize: "14px",
-                      fontWeight: "bold",
-                      marginBottom: "6px",
+                      marginBottom: "4px",
                     }}
                   >
-                    Phân công KTV
+                    Trạng thái Kanban
                   </label>
-                  <input
-                    type="text"
-                    placeholder="Tên kỹ thuật viên"
-                    value={newWO.assignee}
+                  <select
+                    value={selectedWO.status}
                     onChange={(e) =>
-                      setNewWO({ ...newWO, assignee: e.target.value })
+                      setSelectedWO({
+                        ...selectedWO,
+                        status: e.target.value as WorkOrder["status"],
+                      })
                     }
                     style={{
                       width: "100%",
-                      padding: "8px 12px",
+                      padding: "6px",
+                      borderRadius: "4px",
                       border: "1px solid #cbd5e1",
-                      borderRadius: "6px",
-                      boxSizing: "border-box",
                     }}
-                  />
+                  >
+                    <option value="OPEN">OPEN</option>
+                    <option value="ASSIGNED">ASSIGNED</option>
+                    <option value="IN_PROGRESS">IN_PROGRESS</option>
+                    <option value="COMPLETED">COMPLETED</option>
+                    <option value="CLOSED">CLOSED</option>
+                  </select>
                 </div>
               </div>
+            </div>
 
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "14px",
-                    fontWeight: "bold",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Vật tư / Phụ tùng sử dụng (nếu có)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ví dụ: Vòng bi SKF 6205, Mỡ bôi trơn"
-                  value={newWO.partUsed}
-                  onChange={(e) =>
-                    setNewWO({ ...newWO, partUsed: e.target.value })
-                  }
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "6px",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
+            {/* Phụ tùng đã sử dụng */}
+            <div style={{ marginBottom: "18px" }}>
               <div
                 style={{
                   display: "flex",
-                  justifyContent: "flex-end",
-                  gap: "10px",
-                  marginTop: "10px",
+                  alignItems: "center",
+                  gap: "6px",
+                  fontWeight: "bold",
+                  fontSize: "13px",
+                  marginBottom: "8px",
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  style={{
-                    padding: "8px 16px",
-                    background: "#f1f5f9",
-                    border: "none",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    padding: "8px 16px",
-                    background: "#0284c7",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                    fontWeight: "bold",
-                  }}
-                >
-                  Tạo phiếu
-                </button>
+                <Wrench size={16} color="#d97706" /> Phụ tùng vật tư sử dụng
               </div>
-            </form>
+              {selectedWO.usedParts.length > 0 ? (
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    fontSize: "13px",
+                    border: "1px solid #e2e8f0",
+                  }}
+                >
+                  <thead>
+                    <tr
+                      style={{
+                        background: "#f8fafc",
+                        borderBottom: "1px solid #e2e8f0",
+                        textAlign: "left",
+                      }}
+                    >
+                      <th style={{ padding: "8px" }}>Mã PT</th>
+                      <th style={{ padding: "8px" }}>Tên phụ tùng</th>
+                      <th style={{ padding: "8px" }}>SL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedWO.usedParts.map((p, idx) => (
+                      <tr
+                        key={idx}
+                        style={{ borderBottom: "1px solid #f1f5f9" }}
+                      >
+                        <td style={{ padding: "8px", fontWeight: "bold" }}>
+                          {p.partId}
+                        </td>
+                        <td style={{ padding: "8px" }}>{p.name}</td>
+                        <td style={{ padding: "8px" }}>{p.qty}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: "13px",
+                    color: "#64748b",
+                    fontStyle: "italic",
+                  }}
+                >
+                  Chưa ghi nhận vật tư xuất kho cho phiếu này.
+                </p>
+              )}
+            </div>
+
+            <button
+              onClick={() =>
+                handleUpdateWO(
+                  selectedWO.id,
+                  selectedWO.assignee,
+                  selectedWO.status,
+                )
+              }
+              style={{
+                width: "100%",
+                padding: "10px",
+                background: "#16a34a",
+                color: "#fff",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontWeight: "bold",
+              }}
+            >
+              Lưu thay đổi phân công
+            </button>
           </div>
         </div>
       )}
