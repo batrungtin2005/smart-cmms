@@ -68,6 +68,9 @@ class AssetDetailsView extends StatelessWidget {
   Widget build(BuildContext context) => ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (asset.cachedAt != null)
+            Text(
+                'Dữ liệu đã lưu trên máy · cập nhật: ${asset.cachedAt!.toLocal()}'),
           SelectableText(asset.code,
               style: TextStyle(
                   color: Theme.of(context).colorScheme.primary,

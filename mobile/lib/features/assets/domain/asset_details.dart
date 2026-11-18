@@ -15,6 +15,7 @@ class AssetDetails {
     this.installDate,
     this.specifications = const {},
     this.recentHistory = const [],
+    this.cachedAt,
   });
 
   final String id;
@@ -32,6 +33,7 @@ class AssetDetails {
   final DateTime? installDate;
   final Map<String, Object?> specifications;
   final List<MaintenanceEntry> recentHistory;
+  final DateTime? cachedAt;
 }
 
 class MaintenanceEntry {

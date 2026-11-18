@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../../core/network/api_client.dart';
 import '../domain/work_order.dart';
 import '../domain/work_order_repository.dart';
+import '../domain/local_work_orders.dart';
 import 'work_order_controller.dart';
 import 'work_order_labels.dart';
 
@@ -41,16 +42,27 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
   int _partsGeneration = 0;
   List<StockPart> _parts = [];
   ResultPage<StockPart>? _partsPage;
+  LocalWorkOrders? get _local => widget.repository is LocalWorkOrders
+      ? widget.repository as LocalWorkOrders
+      : null;
+  Future<void> _draftWrites = Future.value();
+  StreamSubscription<void>? _connectionSubscription;
+  int _draftRevision = 0;
+  String? _draftMessage;
 
   @override
   void initState() {
     super.initState();
     _work = WorkOrderController(widget.repository, widget.technicianId);
+    _connectionSubscription = _local?.connectionChanges.listen((_) {
+      if (mounted) setState(() {});
+    });
     unawaited(_guard(_work.load()));
   }
 
   @override
   void dispose() {
+    unawaited(_connectionSubscription?.cancel());
     _work.dispose();
     _notes.dispose();
     _rootCause.dispose();
@@ -67,7 +79,54 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
     return result;
   }
 
+  Future<bool> _persistDraft() async {
+    final local = _local, id = _work.selectedId;
+    if (local == null || id == null) return true;
+    final draft = SavedWorkDraft(
+        report: _draft(),
+        material: MaterialDraft(
+            parts: _selections.values.toList(), notes: _materialNotes.text),
+        reviewRequired: _work.materialReviewRequired);
+    final dirty = _dirty;
+    final revision = ++_draftRevision;
+    var saved = true;
+    final write = _draftWrites.then((_) => dirty
+        ? local.saveDraft(widget.technicianId, id, draft)
+        : local.deleteDraft(widget.technicianId, id));
+    _draftWrites = write.then<void>((_) {
+      if (mounted && revision == _draftRevision) {
+        setState(
+            () => _draftMessage = dirty ? 'Bản nháp đã lưu trên máy.' : null);
+      }
+    }, onError: (Object _, StackTrace __) {
+      saved = false;
+      if (mounted && revision == _draftRevision) {
+        setState(() => _draftMessage =
+            'Chưa lưu được bản nháp. Giữ màn hình này và thử lại.');
+      }
+    });
+    await _draftWrites;
+    return saved;
+  }
+
+  Future<bool> _deleteDraft() async {
+    final id = _work.selectedId;
+    if (_local == null || id == null) return true;
+    await _draftWrites;
+    try {
+      await _local!.deleteDraft(widget.technicianId, id);
+      return true;
+    } catch (_) {
+      if (mounted) {
+        setState(() => _draftMessage = 'Chưa xóa được bản nháp. Hãy thử lại.');
+      }
+      return false;
+    }
+  }
+
   void _clearDraft() {
+    _draftRevision++;
+    _draftMessage = null;
     _notes.clear();
     _rootCause.clear();
     _solution.clear();
@@ -87,12 +146,45 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
   }
 
   Future<void> _open(WorkOrder order) async {
+    await _draftWrites;
+    if (!mounted) return;
     _clearDraft();
     await _guard(_work.open(order.id));
     if (!mounted || _work.selected?.id != order.id) return;
     _rootCause.text = _work.selected!.rootCause ?? '';
     _solution.text = _work.selected!.solution ?? '';
     _notes.text = _work.selected!.completionNotes ?? '';
+    final selected = _work.selected!;
+    if (_local != null &&
+        ![
+          WorkOrderStatus.completed,
+          WorkOrderStatus.closed,
+          WorkOrderStatus.cancelled
+        ].contains(selected.status)) {
+      try {
+        final saved = await _local!.loadDraft(widget.technicianId, order.id);
+        if (!mounted || _work.selectedId != order.id || saved == null) return;
+        setState(() {
+          _rootCause.text = saved.report.rootCause;
+          _solution.text = saved.report.solution;
+          _notes.text = saved.report.notes;
+          _materialNotes.text = saved.material.notes;
+          _selections.addEntries(
+              saved.material.parts.map((p) => MapEntry(p.part.id, p)));
+          _dirty = true;
+          _reportDirty = saved.report.rootCause.isNotEmpty ||
+              saved.report.solution.isNotEmpty ||
+              saved.report.notes.isNotEmpty;
+          _work.materialReviewRequired = saved.reviewRequired;
+          _work.mustRefresh = saved.reviewRequired;
+          _draftMessage = 'Đã khôi phục bản nháp trên máy.';
+        });
+      } catch (_) {
+        if (mounted) {
+          setState(() => _draftMessage = 'Chưa đọc được bản nháp trên máy.');
+        }
+      }
+    }
   }
 
   void _back() {
@@ -134,6 +226,7 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
     _dirty = true;
     _reportDirty = true;
     if (_formError != null) setState(() => _formError = null);
+    unawaited(_persistDraft());
   }
 
   CompletionDraft _draft() => CompletionDraft(
@@ -158,6 +251,8 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
   Future<void> _complete() async {
     final success = await _guard(_work.complete(_draft()));
     if (!mounted) return;
+    if (success) await _deleteDraft();
+    if (!mounted) return;
     setState(() {
       _review = false;
       if (success) _dirty = false;
@@ -167,6 +262,7 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
   Future<void> _refreshDetail() async {
     final id = _work.selectedId;
     if (id == null) return;
+    await _local?.recheckConnection();
     await _guard(_work.open(id));
     if (!mounted) return;
     if (_work.selected != null &&
@@ -181,6 +277,7 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
         _selections.clear();
         _materialNotes.clear();
       });
+      await _deleteDraft();
     }
   }
 
@@ -248,6 +345,7 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
   Widget _identified(String id, Widget field) =>
       Semantics(container: true, identifier: id, child: field);
   Widget _card(String title, List<Widget> children) => Card(
+      key: ValueKey('work_card_$title'),
       child: Padding(
           padding: const EdgeInsets.all(16),
           child:
@@ -259,8 +357,13 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
             ...children
           ])));
 
+  Future<void> _refreshList() async {
+    await _local?.recheckConnection();
+    await _guard(_work.load(filter: _work.priority));
+  }
+
   Widget _list() => RefreshIndicator(
-        onRefresh: () => _guard(_work.load(filter: _work.priority)),
+        onRefresh: _refreshList,
         child: ListView(
             key: const PageStorageKey('work-list'),
             padding: const EdgeInsets.all(16),
@@ -278,9 +381,11 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
                       onSelected: (_) => _guard(_work.load(filter: priority))),
               ]),
               const SizedBox(height: 12),
+              if (_work.listPage?.cachedAt != null)
+                Text(
+                    'Dữ liệu đã tải về · cập nhật: ${_work.listPage!.cachedAt!.toLocal()}'),
               if (_work.listError != null)
-                _error(_work.listError!,
-                    retry: () => _guard(_work.load(filter: _work.priority))),
+                _error(_work.listError!, retry: _refreshList),
               if (!_work.loading &&
                   _work.listError == null &&
                   _work.orders.isEmpty)
@@ -299,7 +404,7 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
                           : null),
                   title: Text(order.title),
                   subtitle: Text(
-                      '${order.code} · ${order.priority.label}\n${order.status.label} · ${order.assetCode}'),
+                      '${order.code} · ${order.priority.label}\n${order.status.label} · ${order.assetCode}${order.pendingSync ? ' · Chờ đồng bộ' : ''}'),
                   trailing: const Icon(Icons.chevron_right),
                 )),
               if (_work.loading)
@@ -316,6 +421,8 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
           key: const PageStorageKey('work-parts'),
           padding: const EdgeInsets.all(16),
           children: [
+            if (_partsPage?.cachedAt != null)
+              const Text('Phụ tùng đã lưu trên máy. Tồn kho chỉ để tham khảo.'),
             _identified(
                 'work_part_search',
                 TextField(
@@ -351,6 +458,7 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
                   _dirty = true;
                   _picking = false;
                   _partsGeneration++;
+                  unawaited(_persistDraft());
                 }),
               )),
             if (_partsLoading) const Center(child: CircularProgressIndicator()),
@@ -391,6 +499,7 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
                         _formError = null;
                         _selections[selection.part.id] = PartSelection(
                             selection.part, int.tryParse(value) ?? 0);
+                        unawaited(_persistDraft());
                       }),
                     ))),
             IconButton(
@@ -400,6 +509,7 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
                     : () => setState(() {
                           _selections.remove(selection.part.id);
                           _dirty = true;
+                          unawaited(_persistDraft());
                         }),
                 icon: const Icon(Icons.delete_outline)),
           ]),
@@ -457,7 +567,9 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
       ]);
 
   Future<void> _sendMaterials() async {
+    if (_work.actionBusy) return;
     FocusScope.of(context).unfocus();
+    if (!await _persistDraft() || !mounted || _work.actionBusy) return;
     final draft = MaterialDraft(
         parts: _selections.values.toList(), notes: _materialNotes.text);
     try {
@@ -476,6 +588,7 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
         _materialFormError = null;
       }
     });
+    await _persistDraft();
   }
 
   Widget _materials(WorkOrder order) => _card('Vật tư cho công việc', [
@@ -494,6 +607,8 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
               key: ValueKey('material_${request.id}'),
               style: const TextStyle(fontWeight: FontWeight.bold)),
           if (request.notes?.isNotEmpty == true) Text(request.notes!),
+          if (request.pendingSync)
+            const Text('Thay đổi vật tư này đang chờ đồng bộ.'),
           if (request.reason != null) Text('Lý do: ${request.reason}'),
           for (final item in request.items)
             Text('${item.name} · ${item.quantity} ${item.unit}'),
@@ -557,6 +672,7 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
                             _materialNotes.clear();
                             _dirty = _reportDirty;
                           });
+                          unawaited(_persistDraft());
                         },
               child: const Text('Đã kiểm tra yêu cầu, bắt đầu bản nháp mới')),
         ],
@@ -586,6 +702,7 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
                   enabled: !_work.actionBusy,
                   onChanged: (_) {
                     _dirty = true;
+                    unawaited(_persistDraft());
                   },
                   decoration: const InputDecoration(
                       labelText: 'Ghi chú yêu cầu vật tư'))),
@@ -628,8 +745,17 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
         FilledButton(
             onPressed: () => setState(() => _discard = false),
             child: const Text('Tiếp tục chỉnh sửa')),
+        if (_local != null)
+          TextButton(
+              onPressed: () async {
+                if (!await _persistDraft() || !mounted) return;
+                _clearDraft();
+                _work.close();
+              },
+              child: const Text('Giữ bản nháp và quay lại')),
         TextButton(
-            onPressed: () {
+            onPressed: () async {
+              if (!await _deleteDraft() || !mounted) return;
               _clearDraft();
               _work.close();
             },
@@ -656,6 +782,11 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
                   fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Text(order.title, style: Theme.of(context).textTheme.headlineSmall),
+          if (order.cachedAt != null)
+            Text('Dữ liệu đã lưu · cập nhật: ${order.cachedAt!.toLocal()}'),
+          if (order.pendingSync)
+            const Text('Có thay đổi chỉ lưu trên máy, chờ đồng bộ.'),
+          if (_draftMessage != null) Text(_draftMessage!),
           _card('Thông tin công việc', [
             _row('Trạng thái', order.status.label),
             _row('Ưu tiên', order.priority.label),
@@ -730,11 +861,17 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
           if (order.status == WorkOrderStatus.completed ||
               order.status == WorkOrderStatus.closed)
             _card('Báo cáo hoàn thành', [
-              Text(order.status == WorkOrderStatus.completed
-                  ? 'Đã hoàn thành, chờ quản lý nghiệm thu.'
-                  : 'Công việc đã được nghiệm thu.'),
+              Text(order.pendingSync
+                  ? 'Đã ghi hoàn thành trên máy, chờ đồng bộ.'
+                  : order.status == WorkOrderStatus.completed
+                      ? 'Đã hoàn thành, chờ quản lý nghiệm thu.'
+                      : 'Công việc đã được nghiệm thu.'),
               _row('Hoàn thành', workDate(order.completedAt)),
-              _row('Thời gian thực hiện', '${order.actualHours} giờ'),
+              if (!order.pendingSync)
+                _row('Thời gian thực hiện', '${order.actualHours} giờ')
+              else
+                const Text(
+                    'Thời gian sửa sẽ được máy chủ xác nhận sau khi đồng bộ.'),
               _row('Nguyên nhân', order.rootCause ?? 'Chưa cập nhật'),
               _row('Cách xử lý', order.solution ?? 'Chưa cập nhật'),
               Text(order.completionNotes ?? 'Chưa có ghi chú.'),
@@ -780,6 +917,13 @@ class _WorkOrdersPageState extends State<WorkOrdersPage> {
                           icon: const Icon(Icons.refresh))
                   ]),
               body: Column(children: [
+                if (_local?.offline == true)
+                  Container(
+                      width: double.infinity,
+                      color: const Color(0xFFFFF3CD),
+                      padding: const EdgeInsets.all(12),
+                      child: const Text(
+                          'Đang làm việc offline · Chỉ dùng dữ liệu đã tải về.')),
                 if (widget.repository.isDemo)
                   Container(
                       width: double.infinity,

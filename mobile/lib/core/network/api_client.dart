@@ -4,10 +4,12 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiException implements Exception {
-  const ApiException(this.message, {this.statusCode});
+  const ApiException(this.message,
+      {this.statusCode, this.isConnectionFailure = false});
 
   final String message;
   final int? statusCode;
+  final bool isConnectionFailure;
 
   @override
   String toString() => message;
@@ -63,10 +65,12 @@ class ApiClient {
       })
           .timeout(timeout);
     } on TimeoutException {
-      throw const ApiException('Máy chủ phản hồi chậm. Vui lòng thử lại.');
+      throw const ApiException('Máy chủ phản hồi chậm. Vui lòng thử lại.',
+          isConnectionFailure: true);
     } on http.ClientException {
       throw const ApiException(
-          'Không kết nối được máy chủ. Vui lòng kiểm tra mạng và thử lại.');
+          'Không kết nối được máy chủ. Vui lòng kiểm tra mạng và thử lại.',
+          isConnectionFailure: true);
     }
 
     Object? decoded;

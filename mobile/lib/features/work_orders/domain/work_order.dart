@@ -31,7 +31,9 @@ class WorkOrder {
       this.solution,
       this.verificationNotes,
       this.actualHours = 0,
-      this.parts = const []});
+      this.parts = const [],
+      this.cachedAt,
+      this.pendingSync = false});
   final String id, code, title, assetId, assetCode, assetName, technicianId;
   final WorkOrderPriority priority;
   final WorkOrderStatus status;
@@ -43,6 +45,8 @@ class WorkOrder {
   final DateTime? scheduledEnd, startedAt, completedAt;
   final double actualHours;
   final List<UsedPart> parts;
+  final DateTime? cachedAt;
+  final bool pendingSync;
   bool canStart(String userId) =>
       technicianId == userId &&
       [
@@ -64,7 +68,9 @@ class WorkOrder {
           String? rootCause,
           String? solution,
           double? actualHours,
-          List<UsedPart>? parts}) =>
+          List<UsedPart>? parts,
+          bool? pendingSync,
+          DateTime? cachedAt}) =>
       WorkOrder(
         id: id,
         code: code,
@@ -85,6 +91,8 @@ class WorkOrder {
         verificationNotes: verificationNotes,
         actualHours: actualHours ?? this.actualHours,
         parts: parts ?? this.parts,
+        pendingSync: pendingSync ?? this.pendingSync,
+        cachedAt: cachedAt ?? this.cachedAt,
       );
 }
 
@@ -166,12 +174,14 @@ class MaterialRequest {
       this.notes,
       this.reason,
       this.createdAt,
-      this.items = const []});
+      this.items = const [],
+      this.pendingSync = false});
   final String id, workOrderId, requestedById;
   final MaterialStatus status;
   final String? notes, reason;
   final DateTime? createdAt;
   final List<UsedPart> items;
+  final bool pendingSync;
   MaterialRequest cancelled(String reason) => MaterialRequest(
       id: id,
       workOrderId: workOrderId,
@@ -180,7 +190,18 @@ class MaterialRequest {
       notes: notes,
       reason: reason,
       createdAt: createdAt,
-      items: items);
+      items: items,
+      pendingSync: pendingSync);
+}
+
+class SavedWorkDraft {
+  const SavedWorkDraft(
+      {required this.report,
+      required this.material,
+      this.reviewRequired = false});
+  final CompletionDraft report;
+  final MaterialDraft material;
+  final bool reviewRequired;
 }
 
 class WorkOrderValidation implements Exception {
@@ -193,8 +214,10 @@ class ResultPage<T> {
       {required this.items,
       required this.page,
       required this.totalPages,
-      required this.total});
+      required this.total,
+      this.cachedAt});
   final List<T> items;
   final int page, totalPages, total;
+  final DateTime? cachedAt;
   bool get hasMore => page < totalPages;
 }

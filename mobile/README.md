@@ -2,7 +2,7 @@
 **Phụ trách chính:** SV05 (Mobile Engineer)  
 **Đối tượng sử dụng:** Kỹ thuật viên bảo trì hiện trường (Field Technicians)
 
-Xem nhanh: [hướng dẫn chạy demo](HUONG_DAN_DEMO.md) · [ghi chú bàn giao SV05 tuần 1–3](docs/SV05_TIEN_DO.md).
+Xem nhanh: [hướng dẫn chạy demo](HUONG_DAN_DEMO.md) · [tiến độ SV05 tuần 1–4](docs/SV05_TIEN_DO.md).
 
 ---
 
@@ -52,7 +52,7 @@ Bản iOS cần được build và kiểm thử trên macOS có Xcode. Kiểm th
 - `GET /api/v1/auth/me` xác minh token và lấy hồ sơ. Ứng dụng chỉ nhận tài khoản TECHNICIAN đang hoạt động.
 - Lưu token bằng `flutter_secure_storage`: Android Keystore với dữ liệu mã hóa; iOS Keychain. Không tự lưu mật khẩu hoặc hồ sơ vào database cục bộ.
 - Mở lại ứng dụng: đọc token rồi xác minh với backend trước khi vào trang chính.
-- Token bị từ chối 401/403: xóa token, về đăng nhập. Lỗi mạng/máy chủ: giữ token và cho phép thử lại; chưa có đăng nhập offline.
+- Token bị từ chối 401/403 khi xác minh phiên: xóa token/hồ sơ offline, về đăng nhập. Lỗi mạng có thể khôi phục phiên đã xác thực còn hạn; lỗi máy chủ giữ token để thử lại. Đăng nhập lần đầu vẫn cần mạng.
 - Đăng xuất: xóa token trên máy, xóa trạng thái phiên và trở về form trống. Backend chưa có API thu hồi hoặc refresh token, nên đăng xuất chưa thu hồi JWT trên máy chủ.
 - Kiểm thử hợp đồng API, lỗi mạng/lưu trữ và luồng giao diện trong `test/`.
 
@@ -65,7 +65,7 @@ Bản iOS cần được build và kiểm thử trên macOS có Xcode. Kiểm th
 - Gọi `GET /api/v1/assets/inspect/:code` với Bearer token, hiển thị tên, trạng thái, vị trí/xưởng, hãng/model/serial, giờ vận hành, thông số và tối đa 5 lịch sử bảo trì gần nhất.
 - Phân biệt mã không hợp lệ, không tìm thấy tài sản, lỗi mạng/máy chủ. QR JSON có UUID khác với tài sản trên backend sẽ bị từ chối. Token hết hạn sẽ đưa về đăng nhập.
 
-Phần mobile tuần 3 đã chuyển sang API thật của SV03 (backend từ develop `63665f2`; nhánh SV05 đã gộp develop `96fb8bd` ngày 15/11/2026). Máy hiện tại đã sao lưu và cập nhật database thử nghiệm `smart_cmms_mobile_dev` bằng ba migration có sẵn của SV03. Không sửa mã nguồn backend; SQLite/đồng bộ và iOS vẫn còn phần việc riêng.
+Phần mobile tuần 3 đã chuyển sang API thật của SV03 (backend từ develop `63665f2`; nhánh SV05 đã gộp develop `96fb8bd` ngày 15/11/2026). Máy hiện tại đã sao lưu và cập nhật database thử nghiệm `smart_cmms_mobile_dev` bằng ba migration có sẵn của SV03. Tuần 4 bổ sung SQLite và hàng đợi PENDING trên điện thoại; gửi Sync API thật và kiểm thử iOS còn là phần việc tiếp theo.
 
 ### Tuần 3 — công việc và vật tư qua API thật
 
@@ -83,7 +83,7 @@ Phần mobile tuần 3 đã chuyển sang API thật của SV03 (backend từ de
 | Mặc định | `flutter run -d emulator-5554` | API thật, cần backend và database đã migration |
 | Mẫu trong bộ nhớ | `flutter run -d emulator-5554 --dart-define=WORK_ORDERS_DEMO=true` | Có nhãn DỮ LIỆU MẪU; không có tài khoản thủ kho, có thể hủy PENDING để thử hoàn thành không dùng vật tư |
 
-Đăng nhập/QR vẫn dùng backend thật ở cả hai chế độ. Bản nháp trong bộ nhớ mất khi đóng tiến trình; công việc gửi qua API thật được lưu trên backend. Chi tiết endpoint/payload trong [hợp đồng API hiện tại](docs/work_order_api_contract.md).
+Đăng nhập lần đầu cần backend thật. Bản Android/iOS có lưu phiên đã xác thực còn hạn để khôi phục offline, QR dùng cache của thiết bị đã tra cứu. Work Order API trên mobile lưu bản nháp bằng SQLite; Work Order mẫu và bản web vẫn giữ bản nháp trong bộ nhớ. Chi tiết endpoint/payload trong [hợp đồng API hiện tại](docs/work_order_api_contract.md). iOS chưa được build/kiểm thử.
 
 Đã kiểm tra: `flutter analyze` không có vấn đề; **81 Flutter tests đạt**; **45 backend tests có sẵn của SV03 đạt** (gồm PostgreSQL trong schema test riêng); **6 nhóm kiểm tra API thật đạt**, gồm chống trừ kho lặp, chặn PENDING và vòng sửa lại/nghiệm thu. API my-tasks và parts đều trả 200. Báo cáo `build/verification/work-orders-live-api-report.json` và `work-orders-api-readiness.json` được sinh lại tại máy, không chứa mật khẩu/token.
 
@@ -247,23 +247,26 @@ APK debug nằm ở `build/app/outputs/flutter-apk/app-debug.apk`. Unit/widget t
 
 ---
 
-## LỘ TRÌNH TIẾP THEO
-Work Order đã tích hợp API SV03. Tiếp theo là SQLite/đồng bộ tuần 4–5 và nghiệm thu trên thiết bị thật/iOS. Sync API vẫn là hợp đồng dự kiến.
+## Tuần 4: kiểm tra và lộ trình tiếp theo
 
-1. **Bổ sung offline cho tra cứu tài sản (tuần 4–5):**
+Đợt tuần 4: `flutter analyze` không có vấn đề, **117 kiểm thử Flutter đạt**, APK debug build thành công. Ngày 18/11/2026, **6 bước Android offline đạt** trên API 30: giữ cache/phiên còn hạn, thao tác chờ, bản nháp và UUID qua đóng/mở app; đối chiếu SQLite và backend sau khi có mạng lại. Tồn kho giữ 16 → 16, công việc server vẫn ASSIGNED. Báo cáo `build/verification/offline-android-report.json` ghi `status: passed` và SHA-256 khớp APK đã cài. Các số 28/51/81 ở các phần trên là kết quả từng đợt tuần 1–3.
+Work Order đã tích hợp API SV03. SQLite, bản nháp bền vững và hàng đợi PENDING đã triển khai ở tuần 4. Phần gửi đồng bộ thật vẫn chờ hợp đồng Sync API; chưa nghiệm thu đồng bộ hai chiều.
+
+1. **Đã có phần lưu trên máy (tuần 4):**
    - Luồng online đã gọi `GET /api/v1/assets/inspect/:code` và hiển thị thông tin/lịch sử.
-   - Cần bổ sung SQLite cache, thông báo dữ liệu lưu trên máy và thời điểm cập nhật khi mất mạng.
+   - Đã có SQLite cache theo tài khoản/backend, thời điểm cập nhật, bản nháp tự lưu/khôi phục và hàng đợi UUID bền vững. Không lưu token/mật khẩu vào SQLite.
+   - Đọc cache chỉ khi thiếu kết nối; lỗi HTTP/quyền/dữ liệu không tự chuyển thành dữ liệu cũ. Phiên offline phải còn hạn và đúng token đã xác thực.
 2. **Duy trì tích hợp Work Order thật:**
    - Đã dùng hợp đồng SV03 trong `docs/work_order_api_contract.md`; tiếp tục kiểm tra khi backend thay đổi.
    - Chạy bản mặc định với dữ liệu được giao thật; kiểm tra JWT/ownership, đồng thời thay đổi phân công/trạng thái/tồn kho, chống xuất kho lặp và rollback.
    - Chụp ảnh đính kèm là phần mở rộng nếu nhóm thống nhất, chưa có trong luồng tuần 3 hiện tại.
-3. **CƠ CHẾ OFFLINE-FIRST (TIÊU CHÍ NGHIỆM THU ĐỒ ÁN):**
-   - Lưu trữ cục bộ bằng **SQLite** (`sqflite`).
-   - Mỗi khi kỹ thuật viên thực hiện hành động lúc mất mạng:
-     - Tạo 1 mã `operation_uuid = Uuid().v4()`.
-     - Lưu bản ghi vào bảng SQLite `sync_queue` với trạng thái `PENDING`.
-     - Ứng dụng vẫn phản hồi thành công trên giao diện ngay lập tức.
-   - Khi có kết nối mạng trở lại (lắng nghe `connectivity_plus`):
-     - Tự động đóng gói danh sách operations gửi lên `POST /api/v1/sync/batch`.
-     - Nhận phản hồi từ Backend và đổi trạng thái bản ghi sang `SYNCED` hoặc `CONFLICT`.
-   - Màn hình Trạng thái đồng bộ: Cho phép Kỹ thuật viên xem danh sách các thao tác đang chờ, đã đồng bộ, hoặc bị lỗi.
+3. **Còn lại: nối Sync API và nghiệm thu offline tuần 4–5:**
+   - Chốt DTO/kết quả từng thao tác, chống trùng UUID, thứ tự/phụ thuộc và quy tắc xung đột với SV03. Định dạng nội bộ hiện tại chưa phải DTO đã thống nhất.
+   - Sau đó triển khai gửi `POST /api/v1/sync/batch`, tự động/thủ công, retry có kiểm soát và nhận SYNCED/CONFLICT/FAILED.
+   - Hiện tại app chỉ lưu PENDING, hiển thị rõ Chờ đồng bộ, không trừ kho cục bộ và không phát lại qua API ghi cũ khi có mạng.
+   - Thao tác đã gửi online nhưng chưa rõ kết quả không được tự chuyển thành operation mới. Đọc cache không thể mở khóa gửi tiếp.
+   - Cần nghiệm thu trên điện thoại thật và iOS/macOS. Xem [hướng dẫn demo](HUONG_DAN_DEMO.md) cho ca ngắt mạng và mở lại app.
+
+Các test offline dùng SQLite thật trên Windows qua dev dependency [sqflite_common_ffi](https://pub.dev/packages/sqflite_common_ffi); ứng dụng Android/iOS dùng plugin sqflite. Database `smart_cmms_offline_v1.db` nằm trong vùng riêng của app và được loại khỏi backup/transfer Android.
+
+Kịch bản Android tuần 4 tại thư mục gốc: `node mobile/tool/verify_android_offline.mjs`. Chỉ chạy trên giả lập dự án, database riêng và fixture SV05 mới. Script tạm tắt Wi-Fi/mobile data của giả lập rồi luôn thử bật lại; không tắt mạng của máy Windows. Báo cáo/ảnh ở `mobile/build/verification/offline-*`.

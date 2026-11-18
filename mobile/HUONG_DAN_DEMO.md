@@ -1,4 +1,4 @@
-# Demo mobile tuần 1–3 bằng API thật
+# Demo mobile tuần 1–4 bằng API thật
 
 Dành cho máy Windows hiện tại. Dùng PowerShell trong VS Code; mở Docker Desktop trước.
 
@@ -71,4 +71,31 @@ node mobile/tool/approve_mobile_material.mjs
 - Đây là API thật trên **database thử nghiệm riêng**, dữ liệu có nhãn SV05. App kỹ thuật viên không có quyền duyệt kho; lệnh bước 5 dùng tài khoản Admin từ `.env`.
 - Đã chạy đạt toàn luồng trên Android 11/API 30 ngày 15/11/2026, gồm đóng/mở lại app và kiểm tra dữ liệu lưu ở backend. Mỗi lần demo mới, chạy lại lệnh tạo công việc ở bước 1.
 - APK `app-week3-demo.apk` / cờ `WORK_ORDERS_DEMO=true` chỉ dùng dữ liệu trong bộ nhớ, không có bước thủ kho thật. Dùng `app-debug.apk` để trình bày luồng tích hợp.
-- Chưa có SQLite/đồng bộ mất mạng (tuần 4–5); iOS chưa build/kiểm thử. Chi tiết cài đặt: [README.md](README.md).
+- Đã có SQLite và hàng đợi cục bộ (tuần 4); gửi đồng bộ thật đang chờ API SV03. iOS chưa build/kiểm thử. Chi tiết cài đặt: [README.md](README.md).
+
+## Tuần 4: thử mất mạng và mở lại app
+
+Đã kiểm tra đạt trên Android 11/API 30 ngày 18/11/2026. Dùng APK `app-debug.apk` mới trong bước 3.
+
+1. Khi còn mạng: đăng nhập, mở công việc mới, Bắt đầu làm → Thêm phụ tùng → tìm/chọn phụ tùng để tải dữ liệu cần dùng về máy.
+2. Nhập báo cáo/vật tư đang soạn; chờ dòng **Bản nháp đã lưu trên máy**.
+3. Tắt mạng riêng giả lập rồi đóng/mở app bằng PowerShell:
+
+```powershell
+$adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
+& $adb -s emulator-5554 shell svc wifi disable
+& $adb -s emulator-5554 shell svc data disable
+& $adb -s emulator-5554 shell am force-stop com.example.smart_cmms_mobile
+& $adb -s emulator-5554 shell am start -n com.example.smart_cmms_mobile/.MainActivity
+```
+
+4. Mở lại công việc: vẫn có dữ liệu/bản nháp, app báo đang offline. Thử tạm dừng/tiếp tục hoặc gửi yêu cầu vật tư → chỉ lưu **Chờ đồng bộ**.
+5. Quay lại bằng **Giữ bản nháp và quay lại** → trang chủ → **Trạng thái đồng bộ**. Đóng/mở app lần nữa, hàng đợi vẫn còn.
+6. Bật lại mạng:
+
+```powershell
+& $adb -s emulator-5554 shell svc wifi enable
+& $adb -s emulator-5554 shell svc data enable
+```
+
+Chỉ dùng được dữ liệu đã tải trước. Đăng nhập lần đầu hoặc token hết hạn cần mạng. **Có mạng lại chưa gửi hàng đợi lên server**; phần này chờ Sync API SV03. PENDING chưa phải kết quả đã cập nhật backend.

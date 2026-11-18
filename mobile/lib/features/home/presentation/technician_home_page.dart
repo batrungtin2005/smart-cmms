@@ -6,6 +6,8 @@ import '../../assets/presentation/asset_lookup_page.dart';
 import '../../assets/presentation/qr_camera_view.dart';
 import '../../work_orders/domain/work_order_repository.dart';
 import '../../work_orders/presentation/work_orders_page.dart';
+import '../../work_orders/domain/local_work_orders.dart';
+import '../../work_orders/presentation/sync_queue_page.dart';
 
 class TechnicianHomePage extends StatefulWidget {
   const TechnicianHomePage(
@@ -27,9 +29,19 @@ class TechnicianHomePage extends StatefulWidget {
 class _TechnicianHomePageState extends State<TechnicianHomePage> {
   bool _showScanner = false;
   bool _showWorkOrders = false;
+  bool _showSync = false;
 
   @override
   Widget build(BuildContext context) {
+    final local = widget.workOrderRepository is LocalWorkOrders
+        ? widget.workOrderRepository as LocalWorkOrders
+        : null;
+    if (_showSync && local != null) {
+      return SyncQueuePage(
+          local: local,
+          userId: widget.controller.user!.id,
+          onClose: () => setState(() => _showSync = false));
+    }
     if (_showWorkOrders) {
       return WorkOrdersPage(
           repository: widget.workOrderRepository,
@@ -66,6 +78,11 @@ class _TechnicianHomePageState extends State<TechnicianHomePage> {
               style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 8),
           const Text('Kỹ thuật viên hiện trường'),
+          if (controller.offlineSession)
+            const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                    'Đang dùng phiên offline còn hạn. Chỉ truy cập dữ liệu đã lưu trên máy.')),
           const SizedBox(height: 20),
           Card(
             child: Padding(
@@ -110,11 +127,16 @@ class _TechnicianHomePageState extends State<TechnicianHomePage> {
                       : null,
                   trailing: const Icon(Icons.chevron_right)),
               const Divider(height: 1),
-              const ListTile(
-                  enabled: false,
-                  leading: Icon(Icons.sync),
-                  title: Text('Trạng thái đồng bộ'),
-                  trailing: Text('Sắp có')),
+              ListTile(
+                  enabled: local != null,
+                  onTap: local == null
+                      ? null
+                      : () => setState(() => _showSync = true),
+                  leading: const Icon(Icons.sync),
+                  title: const Text('Trạng thái đồng bộ'),
+                  trailing: local == null
+                      ? const Text('Sắp có')
+                      : const Icon(Icons.chevron_right)),
             ]),
           ),
         ],

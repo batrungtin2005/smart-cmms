@@ -1,6 +1,6 @@
 # SV05 — API Work Order đã tích hợp
 
-Cập nhật 15/11/2026 theo backend SV03 từ `63665f2`; nhánh mobile đã gộp develop `96fb8bd`. Tài liệu này thay hợp đồng đề xuất trước đó. Mobile dùng API hiện có, không sửa quy trình backend.
+Cập nhật 18/11/2026 theo backend SV03 từ `63665f2`; nhánh mobile đã gộp develop `96fb8bd`. Bổ sung hàng đợi tuần 4 và kết quả Android offline. Mobile dùng API hiện có, không sửa quy trình backend.
 
 ## Xác thực và dữ liệu trả về
 
@@ -68,4 +68,15 @@ Máy hiện tại dùng smart_cmms_mobile_dev; đã sao lưu và áp dụng 3 mi
 
 `verify_work_orders_api.mjs` kiểm tra API thật bằng dữ liệu SV05, tạo fixture cho Android. `verify_android_work_orders_live.mjs` kiểm tra APK mặc định, có thao tác Admin riêng để mô phỏng duyệt kho. Các kết quả nằm trong `mobile/build/verification/`, không chứa mật khẩu/token.
 
-SQLite, hàng đợi UUID và đồng bộ offline chưa triển khai (tuần 4–5); iOS và điện thoại thật còn cần kiểm thử.
+## Tuần 4: hàng đợi cục bộ và phần cần chốt với SV03
+
+SQLite và hàng đợi cục bộ đã có. Đây là định dạng nội bộ, chưa phải DTO chính thức của `POST /sync/batch`: UUID, loại thao tác, công việc, payload, thời điểm UTC, thứ tự lưu và UUID phụ thuộc trước đó. Các loại hiện có: START_WORK_ORDER, RESUME_WORK_ORDER, PAUSE_WORK_ORDER, REQUEST_MATERIALS, CANCEL_MATERIAL_REQUEST, COMPLETE_WORK_ORDER.
+
+- PENDING chỉ xác nhận đã lưu trên điện thoại. Chưa có đường gửi thật, không tự đổi sang SYNCED và không phát lại qua API cũ. Hoàn thành cục bộ vẫn ghi Chờ đồng bộ.
+- Bản ghi giữ trạng thái nền và thời điểm tải về để đối chiếu. `baseFetchedAt` là giờ nhận dữ liệu trên máy, không phải version của server.
+- Cần chốt tên trường UUID/payload, giới hạn batch, kết quả từng thao tác, chống xử lý UUID lặp, thứ tự/phụ thuộc, lỗi/xung đột và quy tắc retry.
+- Cần chốt ánh xạ UUID yêu cầu vật tư offline sang ID server để hủy/tham chiếu. Giữ quy trình thủ kho duyệt và xuất kho nguyên tử; không dùng USE_PART để bỏ qua duyệt.
+- Cần chốt cách dùng thời điểm offline khi tính giờ sửa, thay đổi phân công/trạng thái trong lúc mất mạng và JWT hết hạn khi gửi.
+- POST online chưa rõ kết quả không tự chuyển thành thao tác hàng đợi mới. Bản nháp được đánh dấu cần kiểm tra trước khi gửi HTTP; đọc cache không mở khóa gửi tiếp. Yêu cầu offline được ghi cùng việc xóa vật tư đang soạn trong một transaction, tránh khôi phục lại bản nháp đã gửi khi app đóng giữa chừng.
+
+iOS và điện thoại thật vẫn cần kiểm thử. Bản web và Work Order mẫu không dùng lớp lưu trữ Work Order SQLite này.

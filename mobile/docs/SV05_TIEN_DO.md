@@ -1,6 +1,6 @@
-# SV05 — Bàn giao mobile tuần 1–3
+# SV05 — Tiến độ mobile tuần 1–4
 
-**Cập nhật:** 15/11/2026. **Nhánh:** `feat/sv05-mobile-app`.
+**Cập nhật:** 18/11/2026. **Nhánh:** `feat/sv05-mobile-app`.
 
 ## Đã hoàn thành
 
@@ -14,7 +14,7 @@
 - Chặn hoàn thành nếu còn PENDING (kể cả trang sau) hoặc chưa đọc được trạng thái vật tư.
 - Cập nhật hướng dẫn demo, tài liệu API thực tế và công cụ tạo fixture/duyệt vật tư thử.
 
-## Kết quả kiểm tra
+## Kết quả kiểm tra tuần 3 (15/11/2026)
 
 - `flutter analyze`: không có vấn đề; **81 Flutter tests đạt**.
 - **45 backend tests có sẵn của SV03 đạt**, gồm PostgreSQL trong schema ngẫu nhiên riêng và kiểm tra khóa/rollback/phân quyền.
@@ -25,11 +25,27 @@
 - Báo cáo `build/verification/work-orders-android-report.json` có `mode: live-api`, `status: passed`, `liveWorkOrderIntegrationAccepted: true` và SHA-256 khớp APK đã cài. Lần kiểm tra này không có cảnh báo System UI; tồn phụ tùng thử từ 18 xuống 16 đúng một lần cấp 2 đơn vị. Ảnh minh chứng có tiền tố `work-order-live-` trong cùng thư mục.
 - my-tasks và parts trả **200**. Kết quả 404 ngày 13/11 là của backend cũ, đã được thay bằng báo cáo mới.
 
+## Tuần 4 — dữ liệu trên máy và hàng đợi
+
+- SQLite lưu công việc, thiết bị/lịch sử đã tra cứu, kết quả tìm phụ tùng, trạng thái vật tư và bản nháp. Dữ liệu tách theo tài khoản và URL backend.
+- Khi mất kết nối, đọc dữ liệu đã tải và hiển thị thời điểm cập nhật. Không tạo dữ liệu thay thế nếu chưa tải về; lỗi dữ liệu/quyền truy cập không bị coi là mất mạng.
+- Khôi phục phiên offline chỉ từ hồ sơ đã xác thực, cùng token còn hạn và đúng tài khoản. Token/hồ sơ phiên nằm trong secure storage; đăng nhập lần đầu vẫn cần mạng.
+- Bắt đầu/tạm dừng/tiếp tục, yêu cầu/hủy vật tư và ghi hoàn thành offline sinh UUID, lưu PENDING cùng trạng thái cục bộ trong một transaction. Thứ tự và liên kết thao tác được giữ khi đóng/mở app.
+- Hoàn thành trên máy có nhãn Chờ đồng bộ, chưa coi là server chấp nhận. Yêu cầu vật tư chưa duyệt vẫn chặn hoàn thành; không trừ kho trên điện thoại.
+- Tự lưu/khôi phục báo cáo và vật tư đang soạn; có lựa chọn giữ bản nháp hoặc bỏ thay đổi. Khóa gửi sau phản hồi POST chưa rõ được lưu cùng bản nháp; cache không thay cho xác nhận lại từ server.
+- Màn hình Trạng thái đồng bộ hiển thị UUID, công việc, thời điểm và trạng thái từng thao tác. Có mạng lại vẫn giữ nguyên PENDING, chưa gửi tự động qua API ghi cũ.
+- `flutter analyze` không có vấn đề; **117 kiểm thử mobile đạt** (gồm 36 ca mới cho SQLite thật, phiên offline, bản nháp và chặn gửi lặp). APK debug đã build thành công.
+- Ngày 18/11/2026, **6 bước Android offline đạt** trên API 30: khớp APK/tài khoản/cache → mở lại khi mất mạng và giữ thao tác Bắt đầu → yêu cầu vật tư bằng dữ liệu đã tải, chặn hoàn thành → mở lại vẫn đủ ba ô báo cáo → kiểm tra UUID/hàng đợi SQLite → bật mạng lại, backend không bị cập nhật.
+- Báo cáo `build/verification/offline-android-report.json` ghi `status: passed`, SHA-256 khớp APK đã cài; xác nhận 2 thao tác của công việc thử và giữ nguyên 2 thao tác đã chờ trước đó. Tồn kho 16 → 16; công việc trên backend vẫn ASSIGNED; chưa gọi Sync API. Ảnh: `offline-pending-android.png`, `offline-draft-restored-android.png`, `offline-queue-android.png`.
+- Khi ghi yêu cầu offline, xóa phần vật tư đã gửi khỏi bản nháp trong cùng transaction với hàng đợi; giữ nguyên báo cáo. Khi gửi POST online, ghi cờ cần kiểm tra trước khi gọi API, chống tạo trùng nếu app tắt giữa chừng.
+- Đã sửa lỗi mất focus khi dòng thông báo tự lưu xuất hiện; kiểm thử giữ focus và nhập tiếp sau ký tự đầu tiên đã đạt.
+
 ## Database và giới hạn
 
+- Đã kiểm tra GitHub `develop` ngày 18/11/2026 tại `b6af603`: thư mục Sync mới có README, chưa có API batch thực thi. Phần bàn giao này hoàn thành lưu trữ/hàng đợi cục bộ; thao tác vẫn PENDING cho tới khi tích hợp Sync API.
 - Đã sao lưu `smart_cmms_mobile_dev` trước khi áp dụng 3 migration SV03: status history → material requests → completion. Backup/báo cáo nằm trong `mobile/build/verification/`, được Git bỏ qua.
 - Các thử nghiệm ghi dữ liệu có nhãn SV05 vào database riêng; có giao dịch xuất kho thử qua API. Không chạy trên database dùng chung/sản xuất.
-- SQLite, hàng đợi UUID và đồng bộ/conflict offline **chưa triển khai** (tuần 4–5). Bản nháp chưa lưu bền khi đóng tiến trình app.
+- SQLite, bản nháp bền vững và hàng đợi UUID đã triển khai cho Work Order API trên mobile. Gửi Sync API, nhận SYNCED/CONFLICT/FAILED và thử lại có kiểm soát còn chờ hợp đồng/API SV03. Chưa nghiệm thu đồng bộ hai chiều tuần 4–5.
 - iOS mới có cấu hình, **chưa build/kiểm thử trên macOS**; chưa kiểm thử điện thoại thật.
 - `.env`, mật khẩu/token, APK, ảnh, backup và báo cáo build không đưa vào Git.
 
