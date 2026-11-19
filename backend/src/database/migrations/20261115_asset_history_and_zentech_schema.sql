@@ -9,9 +9,17 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 1. TẠO CÁC KIỂU ENUM NẾU CHƯA CÓ
+-- 1. TẠO CÁC KIỂU ENUM NẾU CHƯA CÓ (ĐỒNG BỘ CẢ assets_ VÀ asset_)
+DO $$ BEGIN
+    CREATE TYPE assets_status_enum AS ENUM ('OPERATIONAL', 'DOWN', 'MAINTENANCE', 'DECOMMISSIONED');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
 DO $$ BEGIN
     CREATE TYPE asset_status_enum AS ENUM ('OPERATIONAL', 'DOWN', 'MAINTENANCE', 'DECOMMISSIONED');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE TYPE assets_criticality_enum AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 DO $$ BEGIN
@@ -31,6 +39,23 @@ EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 DO $$ BEGIN
     CREATE TYPE transaction_type_enum AS ENUM ('IMPORT', 'EXPORT', 'ADJUSTMENT');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- 1.1. TẠO IMPLICIT CAST TỰ ĐỘNG CHUYỂN ĐỔI NẾU KHÁC TÊN ENUM (CHỐNG LỖI MISMATCH TYPEORM)
+DO $$ BEGIN
+    CREATE CAST (asset_status_enum AS assets_status_enum) WITH INOUT AS IMPLICIT;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE CAST (assets_status_enum AS asset_status_enum) WITH INOUT AS IMPLICIT;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE CAST (asset_criticality_enum AS assets_criticality_enum) WITH INOUT AS IMPLICIT;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE CAST (assets_criticality_enum AS asset_criticality_enum) WITH INOUT AS IMPLICIT;
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 -- 2. ĐẢM BẢO BẢNG LOCATIONS
@@ -56,8 +81,8 @@ CREATE TABLE IF NOT EXISTS assets (
     model                VARCHAR(100),
     serial_number        VARCHAR(100),
     location_id          UUID REFERENCES locations(id) ON DELETE SET NULL,
-    status               asset_status_enum NOT NULL DEFAULT 'OPERATIONAL',
-    criticality          asset_criticality_enum NOT NULL DEFAULT 'MEDIUM',
+    status               assets_status_enum NOT NULL DEFAULT 'OPERATIONAL',
+    criticality          assets_criticality_enum NOT NULL DEFAULT 'MEDIUM',
     install_date         DATE,
     warranty_expiry_date DATE,
     operating_hours      NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
@@ -135,8 +160,8 @@ CREATE TABLE IF NOT EXISTS asset_maintenance_history (
     is_failure_counted          BOOLEAN NOT NULL DEFAULT FALSE,
     failure_cause               VARCHAR(255),
     action_taken                TEXT,
-    status_before               asset_status_enum DEFAULT 'DOWN',
-    status_after                asset_status_enum NOT NULL DEFAULT 'OPERATIONAL',
+    status_before               assets_status_enum DEFAULT 'DOWN',
+    status_after                assets_status_enum NOT NULL DEFAULT 'OPERATIONAL',
     parts_replaced              JSONB DEFAULT '[]'::jsonb,
     cost_parts                  NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     cost_labor                  NUMERIC(12, 2) NOT NULL DEFAULT 0.00,

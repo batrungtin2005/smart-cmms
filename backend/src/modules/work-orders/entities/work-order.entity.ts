@@ -96,7 +96,7 @@ export class WorkOrder extends AppBaseEntity {
   @Column({ name: 'start_time', type: 'timestamptz', nullable: true })
   startTime: Date | null; // Thời điểm kỹ thuật viên bắt đầu sửa
 
-  @Column({ name: 'asset_status_at_start', type: 'enum', enum: AssetStatus, enumName: 'asset_status_enum', nullable: true })
+  @Column({ name: 'asset_status_at_start', type: 'enum', enum: AssetStatus, enumName: 'assets_status_enum', nullable: true })
   assetStatusAtStart: AssetStatus | null;
 
   @Column({ name: 'operating_hours_at_failure', type: 'decimal', precision: 10, scale: 2, nullable: true })

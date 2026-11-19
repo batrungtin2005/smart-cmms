@@ -10,9 +10,17 @@ BEGIN;
 -- 1. ĐẢM BẢO EXTENSION UUID ĐƯỢC KÍCH HOẠT
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 2. TẠO CÁC KIỂU ENUM NẾU CHƯA CÓ
+-- 2. TẠO CÁC KIỂU ENUM NẾU CHƯA CÓ (ĐỒNG BỘ CẢ assets_ VÀ asset_)
+DO $$ BEGIN
+    CREATE TYPE assets_status_enum AS ENUM ('OPERATIONAL', 'DOWN', 'MAINTENANCE', 'DECOMMISSIONED');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
 DO $$ BEGIN
     CREATE TYPE asset_status_enum AS ENUM ('OPERATIONAL', 'DOWN', 'MAINTENANCE', 'DECOMMISSIONED');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE TYPE assets_criticality_enum AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 DO $$ BEGIN
@@ -28,6 +36,23 @@ DO $$ BEGIN
         'PART_REPLACEMENT',
         'CALIBRATION'
     );
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- 2.1. TẠO IMPLICIT CAST TỰ ĐỘNG CHUYỂN ĐỔI NẾU KHÁC TÊN ENUM (CHỐNG LỖI MISMATCH TYPEORM)
+DO $$ BEGIN
+    CREATE CAST (asset_status_enum AS assets_status_enum) WITH INOUT AS IMPLICIT;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE CAST (assets_status_enum AS asset_status_enum) WITH INOUT AS IMPLICIT;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE CAST (asset_criticality_enum AS assets_criticality_enum) WITH INOUT AS IMPLICIT;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE CAST (assets_criticality_enum AS asset_criticality_enum) WITH INOUT AS IMPLICIT;
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 -- 3. CHÈN VỊ TRÍ NHÀ XƯỞNG MẪU (locations) NẾU BẢNG ĐANG TRỐNG
@@ -53,12 +78,12 @@ DECLARE
         'Robot Hàn Công Nghiệp', 'Lò Tôi Chân Không', 'Máy Cắt Laser Fiber 6kW', 'Máy Chấn Tôn CNC',
         'Máy Ép Nhựa 350T', 'Bơm Thủy Lực Cao Áp', 'Hệ Thống Sấy Khí Hấp Thụ', 'Máy Mài Phẳng CNC'
     ];
-    v_statuses asset_status_enum[] := ARRAY[
-        'OPERATIONAL'::asset_status_enum, 'OPERATIONAL'::asset_status_enum, 'OPERATIONAL'::asset_status_enum,
-        'OPERATIONAL'::asset_status_enum, 'MAINTENANCE'::asset_status_enum, 'DOWN'::asset_status_enum
+    v_statuses assets_status_enum[] := ARRAY[
+        'OPERATIONAL'::assets_status_enum, 'OPERATIONAL'::assets_status_enum, 'OPERATIONAL'::assets_status_enum,
+        'OPERATIONAL'::assets_status_enum, 'MAINTENANCE'::assets_status_enum, 'DOWN'::assets_status_enum
     ];
-    v_criticalities asset_criticality_enum[] := ARRAY[
-        'MEDIUM'::asset_criticality_enum, 'HIGH'::asset_criticality_enum, 'CRITICAL'::asset_criticality_enum, 'LOW'::asset_criticality_enum
+    v_criticalities assets_criticality_enum[] := ARRAY[
+        'MEDIUM'::assets_criticality_enum, 'HIGH'::assets_criticality_enum, 'CRITICAL'::assets_criticality_enum, 'LOW'::assets_criticality_enum
     ];
     v_loc_ids UUID[];
     v_asset_code VARCHAR(50);
@@ -68,8 +93,8 @@ DECLARE
     v_model VARCHAR(100);
     v_serial VARCHAR(100);
     v_loc_id UUID;
-    v_status asset_status_enum;
-    v_crit asset_criticality_enum;
+    v_status assets_status_enum;
+    v_crit assets_criticality_enum;
     v_install_date DATE;
     v_warranty_date DATE;
     v_op_hours NUMERIC(10,2);
@@ -293,8 +318,8 @@ BEGIN
                 v_is_failure,
                 v_cause,
                 v_action,
-                CASE WHEN v_is_failure THEN 'DOWN'::asset_status_enum ELSE 'MAINTENANCE'::asset_status_enum END,
-                'OPERATIONAL'::asset_status_enum,
+                CASE WHEN v_is_failure THEN 'DOWN'::assets_status_enum ELSE 'MAINTENANCE'::assets_status_enum END,
+                'OPERATIONAL'::assets_status_enum,
                 v_parts_json,
                 v_cost_parts,
                 v_cost_labor,

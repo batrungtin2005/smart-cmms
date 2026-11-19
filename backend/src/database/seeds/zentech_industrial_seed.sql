@@ -6,6 +6,46 @@
 
 BEGIN;
 
+-- 0. ĐẢM BẢO CÁC KIỂU ENUM VÀ IMPLICIT CAST ĐỒNG BỘ VỚI TYPEORM (CHỐNG LỖI MISMATCH)
+DO $$ BEGIN
+    CREATE TYPE assets_status_enum AS ENUM ('OPERATIONAL', 'DOWN', 'MAINTENANCE', 'DECOMMISSIONED');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE TYPE asset_status_enum AS ENUM ('OPERATIONAL', 'DOWN', 'MAINTENANCE', 'DECOMMISSIONED');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE TYPE assets_criticality_enum AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE TYPE asset_criticality_enum AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE TYPE maintenance_event_type_enum AS ENUM (
+        'BREAKDOWN', 'CORRECTIVE_REPAIR', 'PREVENTIVE_MAINTENANCE', 'INSPECTION', 'PART_REPLACEMENT', 'CALIBRATION'
+    );
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- Tạo Implicit Cast tự động tương thích 2 chiều
+DO $$ BEGIN
+    CREATE CAST (asset_status_enum AS assets_status_enum) WITH INOUT AS IMPLICIT;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE CAST (assets_status_enum AS asset_status_enum) WITH INOUT AS IMPLICIT;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE CAST (asset_criticality_enum AS assets_criticality_enum) WITH INOUT AS IMPLICIT;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE CAST (assets_criticality_enum AS asset_criticality_enum) WITH INOUT AS IMPLICIT;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
 -- 1. TẠO VỊ TRÍ NHÀ XƯỞNG CỦA TẬP ĐOÀN ZENTECH (LOCATIONS)
 INSERT INTO locations (id, code, name, description, is_active)
 VALUES
@@ -120,13 +160,13 @@ DECLARE
         'Máy Cắt Laser Fiber 12kW Tốc Độ Cao', 'Máy Chấn Tôn CNC 160T Đa Điểm', 'Robot Hàn Công Nghiệp 6 Trục', 'Lò Tôi Chân Không Áp Suất Cao',
         'Máy Đúc Áp Lực Nhôm Buồng Lạnh 840T', 'Máy Nén Khí Trục Vít Biến Tần 75kW', 'Hệ Thống Sấy Khí Hấp Thụ Công Nghiệp', 'Trạm Biến Áp & Phân Phối 1500kVA'
     ];
-    v_statuses asset_status_enum[] := ARRAY[
-        'OPERATIONAL'::asset_status_enum, 'OPERATIONAL'::asset_status_enum, 'OPERATIONAL'::asset_status_enum,
-        'OPERATIONAL'::asset_status_enum, 'MAINTENANCE'::asset_status_enum, 'DOWN'::asset_status_enum
+    v_statuses assets_status_enum[] := ARRAY[
+        'OPERATIONAL'::assets_status_enum, 'OPERATIONAL'::assets_status_enum, 'OPERATIONAL'::assets_status_enum,
+        'OPERATIONAL'::assets_status_enum, 'MAINTENANCE'::assets_status_enum, 'DOWN'::assets_status_enum
     ];
-    v_criticalities asset_criticality_enum[] := ARRAY[
-        'MEDIUM'::asset_criticality_enum, 'HIGH'::asset_criticality_enum, 'HIGH'::asset_criticality_enum,
-        'CRITICAL'::asset_criticality_enum, 'LOW'::asset_criticality_enum
+    v_criticalities assets_criticality_enum[] := ARRAY[
+        'MEDIUM'::assets_criticality_enum, 'HIGH'::assets_criticality_enum, 'HIGH'::assets_criticality_enum,
+        'CRITICAL'::assets_criticality_enum, 'LOW'::assets_criticality_enum
     ];
     v_loc_ids UUID[] := ARRAY[
         'a0000000-0000-0000-0000-000000000002'::UUID, -- Phân xưởng CNC
@@ -144,8 +184,8 @@ DECLARE
     v_man VARCHAR(100);
     v_mod VARCHAR(100);
     v_sn VARCHAR(100);
-    v_stat asset_status_enum;
-    v_crit asset_criticality_enum;
+    v_stat assets_status_enum;
+    v_crit assets_criticality_enum;
     v_loc UUID;
     v_op_hours NUMERIC(10,2);
     v_install DATE;

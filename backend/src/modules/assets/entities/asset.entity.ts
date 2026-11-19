@@ -48,7 +48,7 @@ export class Asset extends AppBaseEntity {
   @Column({
     type: 'enum',
     enum: AssetStatus,
-    enumName: 'asset_status_enum',
+    enumName: 'assets_status_enum',
     default: AssetStatus.OPERATIONAL,
   })
   status: AssetStatus;
@@ -56,7 +56,7 @@ export class Asset extends AppBaseEntity {
   @Column({
     type: 'enum',
     enum: AssetCriticality,
-    enumName: 'asset_criticality_enum',
+    enumName: 'assets_criticality_enum',
     default: AssetCriticality.MEDIUM,
   })
   criticality: AssetCriticality;
