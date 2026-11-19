@@ -15,6 +15,9 @@ class AuthController extends ChangeNotifier {
   String? errorMessage;
   bool busy = false;
   bool _disposed = false;
+  bool get offlineSession =>
+      _repository is OfflineSessionAuth &&
+      (_repository as OfflineSessionAuth).restoredOffline;
 
   Future<void> restoreSession() async {
     if (busy || _disposed) return;

@@ -68,6 +68,7 @@ class WorkOrderController extends ChangeNotifier {
 
   Future<void> open(String id) async {
     if (_disposed || actionBusy) return;
+    final requiresLiveRead = mustRefresh;
     final generation = ++_detailGeneration;
     if (selected?.id != id) {
       selected = null;
@@ -86,7 +87,8 @@ class WorkOrderController extends ChangeNotifier {
       final order = await repository.detail(id, technicianId);
       if (_disposed || generation != _detailGeneration) return;
       selected = order;
-      mustRefresh = false;
+      mustRefresh = order.cachedAt != null &&
+          (requiresLiveRead || materialReviewRequired);
       _replace(order);
       await _loadMaterials(id, generation);
     } catch (failure) {
@@ -138,13 +140,18 @@ class WorkOrderController extends ChangeNotifier {
       if (_disposed || generation != _detailGeneration || selectedId != id) {
         return;
       }
-      final pending = result.hasMore || more
-          ? (await repository.materials(id, technicianId,
-                  status: MaterialStatus.pending))
-              .total
-          : result.items
-              .where((r) => r.status == MaterialStatus.pending)
-              .length;
+      var cached = result.cachedAt != null;
+      int pending;
+      if (result.hasMore || more) {
+        final pendingPage = await repository.materials(id, technicianId,
+            status: MaterialStatus.pending);
+        pending = pendingPage.total;
+        cached = cached || pendingPage.cachedAt != null;
+      } else {
+        pending = result.items
+            .where((r) => r.status == MaterialStatus.pending)
+            .length;
+      }
       if (_disposed || generation != _detailGeneration || selectedId != id) {
         return;
       }
@@ -159,6 +166,7 @@ class WorkOrderController extends ChangeNotifier {
       materialsPage = result;
       pendingMaterials = pending;
       materialsReady = true;
+      if (materialReviewRequired && cached) mustRefresh = true;
     } catch (failure) {
       if (!_disposed && generation == _detailGeneration) {
         materialsError = _message(failure);
@@ -239,8 +247,12 @@ class WorkOrderController extends ChangeNotifier {
     error = null;
     _notify();
     try {
-      await operation();
+      final result = await operation();
       if (_disposed) return false;
+      if (result.pendingSync && selected != null) {
+        selected = selected!.copyWith(pendingSync: true);
+        _replace(selected!);
+      }
       await _loadMaterials(id, generation);
       return true;
     } catch (failure) {
