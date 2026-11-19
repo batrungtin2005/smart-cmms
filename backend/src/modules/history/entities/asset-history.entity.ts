@@ -125,7 +125,7 @@ export class AssetHistory extends AppBaseEntity {
     name: 'status_before',
     type: 'enum',
     enum: AssetStatus,
-    enumName: 'asset_status_enum',
+    enumName: 'assets_status_enum',
     default: AssetStatus.DOWN,
     nullable: true,
   })
@@ -135,7 +135,7 @@ export class AssetHistory extends AppBaseEntity {
     type: 'enum',
     name: 'status_after',
     enum: AssetStatus,
-    enumName: 'asset_status_enum',
+    enumName: 'assets_status_enum',
     default: AssetStatus.OPERATIONAL,
   })
   statusAfter: AssetStatus;
