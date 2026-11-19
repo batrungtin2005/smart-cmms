@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -15,6 +16,7 @@ import {
   ApiResponse,
   ApiParam,
   ApiQuery,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { PartTransactionsService } from './part-transactions.service';
 import {
@@ -22,8 +24,13 @@ import {
   ExportPartStockDto,
   QueryPartTransactionDto,
 } from './dto';
+import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../../common/guards/roles.guard';
+import { Roles } from '../../../common/decorators/roles.decorator';
 
 @ApiTags('Part Transactions & Stock Movements')
+@ApiBearerAuth('JWT-auth')
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('part-transactions')
 export class PartTransactionsController {
   constructor(
@@ -32,6 +39,7 @@ export class PartTransactionsController {
 
   // 1. ENDPOINT: GHI KHO ĐẦU VÀO (NHẬP KHO VẬT TƯ)
   @Post('import')
+  @Roles('ADMIN', 'WAREHOUSE_KEEPER', 'MAINTENANCE_MANAGER')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Ghi kho đầu vào (Nhập kho vật tư / phụ tùng)',
@@ -52,6 +60,7 @@ export class PartTransactionsController {
 
   // 2. ENDPOINT: XUẤT KHO CHO LỆNH SẢN XUẤT / LỆNH BẢO TRÌ (KIỂM SOÁT TỒN KHO KHÔNG ÂM)
   @Post('export')
+  @Roles('ADMIN', 'WAREHOUSE_KEEPER', 'MAINTENANCE_MANAGER', 'TECHNICIAN')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Xuất kho phụ tùng cho Lệnh sản xuất / Work Order (Khóa chống tồn âm)',
@@ -76,6 +85,7 @@ export class PartTransactionsController {
 
   // 3. ENDPOINT ALIAS: XUẤT KHO CHO LỆNH SẢN XUẤT / LỆNH BẢO TRÌ
   @Post('export-work-order')
+  @Roles('ADMIN', 'WAREHOUSE_KEEPER', 'MAINTENANCE_MANAGER', 'TECHNICIAN')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Xuất kho cho Lệnh sản xuất / Lệnh bảo trì (Alias)',

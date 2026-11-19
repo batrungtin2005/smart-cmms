@@ -8,8 +8,9 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiParam, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { HistoryService } from './history.service';
 import { CreateAssetHistoryDto } from './dto/create-history.dto';
 import {
@@ -23,8 +24,13 @@ import {
   EmitRepairEventDto,
   EmitReplacementEventDto,
 } from './dto/record-event.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @ApiTags('Asset History & Audit Logs')
+@ApiBearerAuth('JWT-auth')
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('history')
 export class HistoryController {
   constructor(
@@ -35,6 +41,7 @@ export class HistoryController {
   // ================= DOMAIN EVENT DISPATCH ENDPOINTS =================
 
   @Post('events/maintenance')
+  @Roles('ADMIN', 'MAINTENANCE_MANAGER', 'TECHNICIAN')
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({
     summary: 'Kích hoạt sự kiện Bảo trì thiết bị (Maintenance Event)',
@@ -62,6 +69,7 @@ export class HistoryController {
   }
 
   @Post('events/repair')
+  @Roles('ADMIN', 'MAINTENANCE_MANAGER', 'TECHNICIAN')
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({
     summary: 'Kích hoạt sự kiện Sửa chữa sự cố (Repair Event)',
@@ -89,6 +97,7 @@ export class HistoryController {
   }
 
   @Post('events/replacement')
+  @Roles('ADMIN', 'MAINTENANCE_MANAGER', 'TECHNICIAN')
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({
     summary: 'Kích hoạt sự kiện Thay thế phụ tùng (Replacement Event)',
@@ -143,6 +152,7 @@ export class HistoryController {
 
   // Ghi nhận nhật ký bảo trì / sự cố trực tiếp
   @Post()
+  @Roles('ADMIN', 'MAINTENANCE_MANAGER', 'TECHNICIAN')
   @ApiOperation({ summary: 'Ghi nhật ký sự cố hoặc bảo trì mới cho thiết bị' })
   createHistory(@Body() dto: CreateAssetHistoryDto) {
     return this.historyService.createHistoryLog(dto);

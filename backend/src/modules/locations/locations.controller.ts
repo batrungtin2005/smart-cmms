@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -17,11 +18,17 @@ import {
   ApiResponse,
   ApiParam,
   ApiQuery,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { LocationsService } from './locations.service';
 import { CreateLocationDto, UpdateLocationDto } from './dto/create-location.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @ApiTags('Locations')
+@ApiBearerAuth('JWT-auth')
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('locations')
 export class LocationsController {
   constructor(private readonly locationsService: LocationsService) {}
@@ -73,6 +80,7 @@ export class LocationsController {
   }
 
   @Post()
+  @Roles('ADMIN', 'MAINTENANCE_MANAGER')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Tạo mới một vị trí (Nhà xưởng / Phân xưởng / Dây chuyền)' })
   @ApiResponse({ status: 201, description: 'Vị trí đã được tạo thành công.' })
@@ -82,6 +90,7 @@ export class LocationsController {
   }
 
   @Patch(':id')
+  @Roles('ADMIN', 'MAINTENANCE_MANAGER')
   @ApiOperation({ summary: 'Cập nhật thông tin vị trí' })
   @ApiParam({ name: 'id', description: 'UUID của vị trí cần cập nhật' })
   @ApiResponse({ status: 200, description: 'Cập nhật thành công.' })
@@ -94,6 +103,7 @@ export class LocationsController {
   }
 
   @Delete(':id')
+  @Roles('ADMIN', 'MAINTENANCE_MANAGER')
   @ApiOperation({
     summary: 'Vô hiệu hóa vị trí (Xóa mềm)',
     description: 'Chỉ xóa được khi không còn vị trí con hoặc máy móc nào trực thuộc vị trí này.',

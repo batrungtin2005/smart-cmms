@@ -11,6 +11,7 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
 import {
@@ -20,6 +21,7 @@ import {
   ApiParam,
   ApiQuery,
   ApiProduces,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { AssetsService } from './assets.service';
 import {
@@ -28,8 +30,13 @@ import {
   UpdateAssetDto,
   UpdateAssetStatusDto,
 } from './dto/create-asset.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @ApiTags('Assets')
+@ApiBearerAuth('JWT-auth')
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('assets')
 export class AssetsController {
   constructor(private readonly assetsService: AssetsService) {}
@@ -173,6 +180,7 @@ export class AssetsController {
 
   // 10. ENDPOINT: THÊM TÀI SẢN MỚI
   @Post()
+  @Roles('ADMIN', 'MAINTENANCE_MANAGER')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Thêm mới tài sản',
@@ -186,6 +194,7 @@ export class AssetsController {
 
   // 11. ENDPOINT: CẬP NHẬT TRẠNG THÁI TÀI SẢN
   @Patch(':id/status')
+  @Roles('ADMIN', 'MAINTENANCE_MANAGER', 'TECHNICIAN')
   @ApiOperation({
     summary: 'Cập nhật trạng thái vận hành của tài sản',
     description: 'Chuyển đổi trạng thái máy giữa OPERATIONAL, DOWN, MAINTENANCE, DECOMMISSIONED.',
@@ -202,6 +211,7 @@ export class AssetsController {
 
   // 12. ENDPOINT: CẬP NHẬT THÔNG TIN TÀI SẢN
   @Patch(':id')
+  @Roles('ADMIN', 'MAINTENANCE_MANAGER')
   @ApiOperation({
     summary: 'Cập nhật thông tin thông số kỹ thuật của tài sản',
     description: 'Cập nhật tên, hãng sản xuất, model, giờ chạy máy hoặc thông số JSON.',
@@ -218,6 +228,7 @@ export class AssetsController {
 
   // 13. ENDPOINT: XÓA TÀI SẢN (SOFT DELETE)
   @Delete(':id')
+  @Roles('ADMIN', 'MAINTENANCE_MANAGER')
   @ApiOperation({
     summary: 'Vô hiệu hóa tài sản (Xóa mềm)',
     description: 'Chuyển isActive = false để lưu trữ lịch sử, không xóa cứng mất dữ liệu.',

@@ -91,7 +91,7 @@ export class PartsController {
 
   // 5. ENDPOINT: TẠO MÃ PHỤ TÙNG MỚI
   @Post()
-  @Roles('ADMIN', 'WAREHOUSE_KEEPER')
+  @Roles('ADMIN', 'WAREHOUSE_KEEPER', 'MAINTENANCE_MANAGER')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Tạo mã phụ tùng mới trong kho' })
   @ApiResponse({ status: 201, description: 'Tạo mới thành công.' })
@@ -102,7 +102,7 @@ export class PartsController {
 
   // 6. ENDPOINT: CẬP NHẬT THÔNG TIN PHỤ TÙNG
   @Patch(':id')
-  @Roles('ADMIN', 'WAREHOUSE_KEEPER')
+  @Roles('ADMIN', 'WAREHOUSE_KEEPER', 'MAINTENANCE_MANAGER')
   @ApiOperation({ summary: 'Cập nhật thông tin phụ tùng, đơn giá, vị trí kệ hoặc ngưỡng an toàn' })
   @ApiParam({ name: 'id', description: 'UUID của phụ tùng' })
   @ApiResponse({ status: 200, description: 'Cập nhật thành công.' })
@@ -116,7 +116,7 @@ export class PartsController {
 
   // 7. ENDPOINT: VÔ HIỆU HÓA PHỤ TÙNG (XÓA MỀM)
   @Delete(':id')
-  @Roles('ADMIN', 'WAREHOUSE_KEEPER')
+  @Roles('ADMIN', 'WAREHOUSE_KEEPER', 'MAINTENANCE_MANAGER')
   @ApiOperation({ summary: 'Vô hiệu hóa phụ tùng (Soft Delete)' })
   @ApiParam({ name: 'id', description: 'UUID của phụ tùng' })
   @ApiResponse({ status: 200, description: 'Vô hiệu hóa thành công.' })
@@ -127,7 +127,7 @@ export class PartsController {
 
   // 8. ENDPOINT CỐT LÕI: XUẤT PHỤ TÙNG SỬA CHỮA CHO THIẾT BỊ (GIAO DỊCH ACID)
   @Post('issue-to-asset')
-  @Roles('ADMIN', 'WAREHOUSE_KEEPER')
+  @Roles('ADMIN', 'WAREHOUSE_KEEPER', 'MAINTENANCE_MANAGER')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Xuất phụ tùng ra sửa chữa cho một tài sản',
@@ -152,7 +152,7 @@ export class PartsController {
 
   // 9. ENDPOINT: ĐIỀU CHỈNH TỒN KHO (NHẬP / XUẤT / KIỂM KÊ)
   @Post(':id/adjust')
-  @Roles('ADMIN', 'WAREHOUSE_KEEPER')
+  @Roles('ADMIN', 'WAREHOUSE_KEEPER', 'MAINTENANCE_MANAGER')
   @ApiOperation({ summary: 'Điều chỉnh số lượng tồn kho (Nhập/Xuất/Kiểm kê)' })
   @ApiParam({ name: 'id', description: 'UUID của phụ tùng' })
   adjustStock(
@@ -173,7 +173,7 @@ export class PartsController {
 
   // 11. ENDPOINT: THIẾT LẬP ĐỊNH MỨC PHỤ TÙNG (BOM) CHO MÁY
   @Post('bom')
-  @Roles('ADMIN', 'WAREHOUSE_KEEPER')
+  @Roles('ADMIN', 'WAREHOUSE_KEEPER', 'MAINTENANCE_MANAGER')
   @ApiOperation({ summary: 'Thiết lập định mức phụ tùng (BOM) cho thiết bị' })
   createBom(@Body() dto: CreateAssetPartBomDto) {
     return this.partsService.createBom(dto);
