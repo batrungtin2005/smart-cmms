@@ -7,36 +7,37 @@ Tài liệu được sinh từ collection [`devops/postman/smart-cmms.postman_co
 
 | Mục | Giá trị |
 |---|---|
-| Ngày chạy | 09/11/2026 |
-| Nhánh | `develop` (commit `530b7b6`) |
+| Ngày chạy | 09/11/2026 (lần đầu) · **22/11/2026 (chạy lại)** |
+| Nhánh | `develop` (commit `530b7b6`, chạy lại trên `5b49de4`) |
 | Môi trường | Docker Compose: PostgreSQL 16, Redis 7 · Backend NestJS chạy local · Node 26 |
 | Dữ liệu test | `devops/postman/seed-test-users.sql` (3 vai trò, 3 tài khoản) + dữ liệu do chính collection tạo và dọn dẹp |
 | Trong phạm vi | Auth & Users (SV01) · Locations, Assets & QR, Parts & Inventory, History & KPI (SV02) |
-| Ngoài phạm vi | Work Orders, Schedules, Reports, Sync (SV03) — chưa có API trên `develop` |
+| Ngoài phạm vi | Work Orders, Schedules, Reports, Sync (SV03) — chưa có API khi viết bộ test (09/11); bổ sung ở tuần sau |
 
 ## 2. Tổng kết
 
 | Chỉ số | Kết quả |
 |---|---|
 | Số request | 81 |
-| Số kiểm tra (assertion) | 285 — **đạt 279**, trượt 6 |
+| Số kiểm tra (assertion) | 09/11: 285 — đạt 279, trượt 6 · **22/11: 285 — đạt 285** |
 | Thời gian phản hồi trung bình | 7 ms |
-| Kết luận | Toàn bộ chức năng nghiệp vụ SV01/SV02 chạy đúng. 6 case trượt đều thuộc nhóm bảo mật (BUG-01). |
+| Kết luận | Toàn bộ chức năng nghiệp vụ SV01/SV02 chạy đúng. 6 case bảo mật trượt ngày 09/11 (BUG-01) đã đạt sau khi SV02 sửa. |
 
 Mỗi request còn được kiểm tra chung: phản hồi JSON đúng định dạng `{ success, statusCode, timestamp }` và thời gian phản hồi < 2000 ms.
 
 ## 3. Lỗi phát hiện (Defects)
 
-| Mã | Mức độ | Mô tả | Ảnh hưởng | Phụ trách |
-|---|---|---|---|---|
-| BUG-01 | Cao | Controller `assets`, `locations`, `parts`, `part-transactions`, `history` không gắn `JwtAuthGuard`: gọi được (kể cả xóa) mà không cần đăng nhập. | Vi phạm yêu cầu bảo mật RBAC; folder `05. Security` trượt 6/6. | SV02 |
-| BUG-02 | Cao | Backend trên `develop` không khởi động được: entity `WorkOrder` chưa được đăng ký với TypeORM (`Entity metadata for User#assignedWorkOrders was not found`). | Không ai chạy được backend từ `develop`; chặn SV04/SV05 gọi API thật. | SV03 (tạo `WorkOrderModule`) |
-| BUG-03 | Cao | `npm run seed` lỗi: script SQL dùng kiểu `asset_status_enum` nhưng TypeORM tạo `assets_status_enum`. Không chèn được thiết bị nào. | Chặn tiêu chí nghiệm thu TC-01 (300 thiết bị). | SV02 |
-| BUG-04 | Trung bình | Chưa có seed cho bảng `roles`/`users`; `POST /auth/users` lại yêu cầu ADMIN nên hệ thống mới không thể đăng nhập. | Tạm dùng `seed-test-users.sql` của SV06. | SV01 |
-| OBS-01 | Thấp | `ADJUSTMENT` đặt lại tồn kho **bằng** `quantity` (không cộng/trừ) và yêu cầu `quantity ≥ 1`, nên không thể kiểm kê về 0. | Cần thống nhất nghiệp vụ kiểm kê. | SV02 |
-| OBS-02 | Thấp | Các API danh sách/tổng quan bọc dữ liệu 2 lớp: `data.success`, `data.data`, `data.meta`. | Web/Mobile phải đọc `response.data.data`. | SV02 |
+| Mã | Mức độ | Mô tả | Ảnh hưởng | Phụ trách | Trạng thái (22/11) |
+|---|---|---|---|---|---|
+| BUG-01 | Cao | Controller `assets`, `locations`, `parts`, `part-transactions`, `history` không gắn `JwtAuthGuard`: gọi được (kể cả xóa) mà không cần đăng nhập. | Vi phạm yêu cầu bảo mật RBAC; folder `05. Security` trượt 6/6. | SV02 | ✅ Đã sửa (#17, commit `5b49de4`) |
+| BUG-02 | Cao | Backend trên `develop` không khởi động được: entity `WorkOrder` chưa được đăng ký với TypeORM (`Entity metadata for User#assignedWorkOrders was not found`). | Không ai chạy được backend từ `develop`; chặn SV04/SV05 gọi API thật. | SV03 (tạo `WorkOrderModule`) | ✅ Đã sửa (#18, PR #23) |
+| BUG-03 | Cao | `npm run seed` lỗi: script SQL dùng kiểu `asset_status_enum` nhưng TypeORM tạo `assets_status_enum`. Không chèn được thiết bị nào. | Chặn tiêu chí nghiệm thu TC-01 (300 thiết bị). | SV02 | ✅ Đã sửa (#19, commit `343ca1e`) |
+| BUG-04 | Trung bình | Chưa có seed cho bảng `roles`/`users`; `POST /auth/users` lại yêu cầu ADMIN nên hệ thống mới không thể đăng nhập. | Tạm dùng `seed-test-users.sql` của SV06. | SV01 | ✅ Đã sửa (#20, PR #21) |
+| OBS-01 | Thấp | `ADJUSTMENT` đặt lại tồn kho **bằng** `quantity` (không cộng/trừ) và yêu cầu `quantity ≥ 1`, nên không thể kiểm kê về 0. | Cần thống nhất nghiệp vụ kiểm kê. | SV02 | Chưa xử lý |
+| OBS-02 | Thấp | Các API danh sách/tổng quan bọc dữ liệu 2 lớp: `data.success`, `data.data`, `data.meta`. | Web/Mobile phải đọc `response.data.data`. | SV02 | Chưa xử lý |
+| BUG-05 | Trung bình | Từ khi có thư mục `backend/test`, `nest build` xuất ra `dist/src/main.js` thay vì `dist/main.js`, nên `npm run start:prod` (`node dist/main`) lỗi `Cannot find module`. | Chạy production / Docker image backend bị hỏng. | SV02 | Mới phát hiện 22/11 |
 
-Lỗi vòng import `asset.entity` ↔ `asset-history.entity` (issue #13) **đã được sửa** trên `develop` — xác nhận ngày chạy.
+Lỗi vòng import `asset.entity` ↔ `asset-history.entity` (issue #13) **đã được sửa** trên `develop` — xác nhận ngày 09/11.
 
 ## 4. Test cases
 
@@ -151,12 +152,12 @@ Theo SRS, mọi API nghiệp vụ phải có JwtAuthGuard. Các request dưới 
 
 | Mã test | Tên | Đầu vào | Các bước | Kết quả mong đợi | Kết quả thực tế | Trạng thái |
 |---|---|---|---|---|---|---|
-| SEC-01 | Danh sách thiết bị không token → 401 | — | Không token → `GET /assets` | HTTP 401 | HTTP 200 · 3 ms — expected response to have status code 401 but got 200 | ❌ Trượt |
-| SEC-02 | Xóa thiết bị không token → 401 | — | Không token → `DELETE /assets/00000000-0000-4000-8000-000000000000` | HTTP 401 | HTTP 404 · 2 ms — expected response to have status code 401 but got 404 | ❌ Trượt |
-| SEC-03 | Tạo phụ tùng không token → 401 | `{}` | Không token → `POST /parts` | HTTP 401 | HTTP 400 · 1 ms — expected response to have status code 401 but got 400 | ❌ Trượt |
-| SEC-04 | Xuất kho không token → 401 | `{}` | Không token → `POST /part-transactions/export` | HTTP 401 | HTTP 400 · 1 ms — expected response to have status code 401 but got 400 | ❌ Trượt |
-| SEC-05 | Ghi lịch sử không token → 401 | `{}` | Không token → `POST /history` | HTTP 401 | HTTP 400 · 1 ms — expected response to have status code 401 but got 400 | ❌ Trượt |
-| SEC-06 | Xóa vị trí không token → 401 | — | Không token → `DELETE /locations/00000000-0000-4000-8000-000000000000` | HTTP 401 | HTTP 404 · 1 ms — expected response to have status code 401 but got 404 | ❌ Trượt |
+| SEC-01 | Danh sách thiết bị không token → 401 | — | Không token → `GET /assets` | HTTP 401 | 09/11: trượt (không có guard) · **22/11: HTTP 401** | ✅ Đạt |
+| SEC-02 | Xóa thiết bị không token → 401 | — | Không token → `DELETE /assets/00000000-0000-4000-8000-000000000000` | HTTP 401 | 09/11: trượt (không có guard) · **22/11: HTTP 401** | ✅ Đạt |
+| SEC-03 | Tạo phụ tùng không token → 401 | `{}` | Không token → `POST /parts` | HTTP 401 | 09/11: trượt (không có guard) · **22/11: HTTP 401** | ✅ Đạt |
+| SEC-04 | Xuất kho không token → 401 | `{}` | Không token → `POST /part-transactions/export` | HTTP 401 | 09/11: trượt (không có guard) · **22/11: HTTP 401** | ✅ Đạt |
+| SEC-05 | Ghi lịch sử không token → 401 | `{}` | Không token → `POST /history` | HTTP 401 | 09/11: trượt (không có guard) · **22/11: HTTP 401** | ✅ Đạt |
+| SEC-06 | Xóa vị trí không token → 401 | — | Không token → `DELETE /locations/00000000-0000-4000-8000-000000000000` | HTTP 401 | 09/11: trượt (không có guard) · **22/11: HTTP 401** | ✅ Đạt |
 
 ### 06. Work Orders, Schedules, Sync (SV03) - CHỜ API
 
