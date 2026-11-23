@@ -23,14 +23,7 @@ async function runSeed() {
     await client.connect();
     console.log('✅ Kết nối database thành công!');
 
-    // 1. CHẠY MIGRATION CẤU TRÚC BẢNG NẾU CHƯA CÓ
-    const migrationFile = path.resolve(__dirname, '../migrations/20261115_asset_history_and_zentech_schema.sql');
-    if (fs.existsSync(migrationFile)) {
-      console.log(`\n📦 Đang thực thi Migration cấu trúc bảng: ${path.basename(migrationFile)}...`);
-      const migrationSql = fs.readFileSync(migrationFile, 'utf8');
-      await client.query(migrationSql);
-      console.log('✅ Migration cấu trúc bảng thành công!');
-    }
+    // Apply schema/migrations separately before seeding data.
 
     // 2. CHẠY SEED DỮ LIỆU CÔNG NGHIỆP ZENTECH (300+ ASSETS & 60+ PARTS)
     const seedFile = path.resolve(__dirname, 'zentech_industrial_seed.sql');

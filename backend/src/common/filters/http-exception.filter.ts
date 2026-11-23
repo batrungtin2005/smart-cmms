@@ -41,6 +41,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
       success: false,
       statusCode: status,
       message,
+      ...(exceptionResponse && typeof exceptionResponse === 'object' &&
+        Array.isArray((exceptionResponse as any).errors) ? { errors: (exceptionResponse as any).errors } : {}),
       timestamp: new Date().toISOString(),
       path: request.url,
     });

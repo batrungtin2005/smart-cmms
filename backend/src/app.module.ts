@@ -1,3 +1,4 @@
+import { SchedulesModule } from './modules/schedules/schedules.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -53,6 +54,7 @@ import { WorkOrdersModule } from './modules/work-orders/work-orders.module';
     PartTransactionModule,
     AssetHistoryModule,
     WorkOrdersModule,
+    SchedulesModule,
   ],
 })
 export class AppModule {}

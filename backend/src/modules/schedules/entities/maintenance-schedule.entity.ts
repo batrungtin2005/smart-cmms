@@ -91,4 +91,19 @@ export class MaintenanceSchedule extends AppBaseEntity {
   @ManyToOne(() => WorkOrder, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'last_work_order_id', foreignKeyConstraintName: 'fk_schedule_last_wo' })
   lastWorkOrder: WorkOrder | null;
+  @Column({ name: 'max_reading_age_minutes', type: 'int', nullable: true })
+  maxReadingAgeMinutes: number | null;
+  @Column({ name: 'cooldown_minutes', type: 'int', nullable: true })
+  cooldownMinutes: number | null;
+  @Column({ name: 'measurement_location', length: 255, nullable: true })
+  measurementLocation: string | null;
+  @Column({ name: 'not_before', type: 'timestamptz', nullable: true })
+  notBefore: Date | null;
+  @Column({ name: 'last_completed_at', type: 'timestamptz', nullable: true })
+  lastCompletedAt: Date | null;
+  @Column({ type: 'int', default: 1 }) cycle: number;
+  @Column({ type: 'int', default: 1 }) revision: number;
+  @Column({ name: 'last_error', type: 'text', nullable: true }) lastError: string | null;
+  @Column({ name: 'last_evaluated_at', type: 'timestamptz', nullable: true }) lastEvaluatedAt: Date | null;
+
 }
