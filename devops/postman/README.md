@@ -16,11 +16,9 @@ Danh sách test case và kết quả: [`../test-plans/02_api_test_cases.md`](../
 cp .env.example .env              # máy đã có Redis ở 6379 thì đặt REDIS_PORT=6380
 docker compose up -d
 npm ci
-npm run dev:backend               # hoặc: cd backend && npm run build && node dist/main
+npm run dev:backend
 docker exec -i smart_cmms_postgres psql -U postgres -d smart_cmms_db < devops/postman/seed-test-users.sql
 ```
-
-> **Lưu ý (09/11/2026):** backend trên `develop` chưa khởi động được do entity `WorkOrder` chưa được đăng ký (BUG-02, chờ SV03 tạo `WorkOrderModule`).
 
 `seed-test-users.sql` chạy lại nhiều lần không bị trùng. Các dữ liệu khác (vị trí, thiết bị, phụ tùng…) do collection tự tạo với mã riêng cho mỗi lần chạy và tự dọn ở folder `99. Cleanup`.
 
@@ -50,7 +48,7 @@ Chỉ chạy một module: thêm `--folder "03. Parts & Inventory (SV02)"` (bắ
 | `02. Assets & QR (SV02)` | CRUD thiết bị, tìm kiếm, phân trang, lọc, trạng thái, mã QR |
 | `03. Parts & Inventory (SV02)` | Phụ tùng, cảnh báo tồn kho, nhập/xuất, **chặn tồn kho âm**, BOM |
 | `04. History & KPI MTTR/MTBF (SV02)` | Ghi sự cố, tính MTTR/MTBF |
-| `05. Security` | Gọi API nghiệp vụ không token, mong đợi 401. **Hiện đang trượt** cho tới khi SV02 gắn `JwtAuthGuard` (BUG-01) |
+| `05. Security` | Gọi API nghiệp vụ không token, mong đợi 401 |
 | `06. Work Orders… (SV03)` | Chờ API của SV03 |
 | `99. Cleanup` | Xóa mềm dữ liệu vừa tạo |
 
