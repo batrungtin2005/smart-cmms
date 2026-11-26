@@ -127,3 +127,18 @@ Schema khởi tạo hiện có 17 bảng và 11 enum: thêm material_requests/ma
 ## Hoàn thành và nghiệm thu
 
 SQL bổ sung REWORK_REQUIRED vào work_order_status_enum, hai snapshot nullable trên work_orders (asset_status_at_start, operating_hours_at_failure), và cho phép null ở asset_maintenance_history.status_before/operating_hours_at_failure. Database cũ dùng migrations/20261113_work_order_completion.sql sau hai migration Work Order trước đó. Không backfill lịch sử/counter cho phiếu cũ và chưa áp dụng vào schema ứng dụng. Tổng số bảng/loại enum không đổi.
+
+
+## Đồng bộ enum và vai trò — 23/11/2026
+
+Database cũ: sau các migration Work Order và `20261123_maintenance_schedules.sql`, chạy `migrations/20261123_normalize_asset_enums_and_roles.sql`. Database mới dùng `smart_cmms_db.sql` đã dùng tên enum chuẩn.
+
+- Chuẩn: `assets_status_enum`, `assets_criticality_enum`; dùng chung cho Asset, Work Order và History.
+- Nếu chỉ có enum cũ: đổi tên, giữ dữ liệu/phụ thuộc. Nếu cả cũ/mới cùng tồn tại: chuyển cột qua text sang enum chuẩn, giữ default; bỏ cast tương thích và enum cũ. Không dùng CASCADE; phụ thuộc ngoài dự kiến làm transaction thất bại để đối soát.
+- Chuyển mọi user có role MANAGER sang MAINTENANCE_MANAGER trước khi xóa MANAGER. Không xóa tài khoản.
+- Migration chạy trong transaction, lock timeout 10 giây, có thể chạy lại. Không chạy lại các migration lịch sử cũ sau bước chuẩn hóa.
+- Seed SQL không tạo lại enum/cast cũ. `npm run seed` và `seed:zentech` không tự chạy migration cấu trúc nữa; áp dụng schema/migrations trước khi seed.
+- `verify-schema.cjs` thử cả hai trường hợp enum, chuyển user vai trò cũ, kiểm tra giá trị giữ nguyên và chạy migration lặp trong schema tạm rollback.
+- Cấu hình build tắt incremental để Nest xóa dist rồi build lại vẫn tạo đủ file. Giữ DB_SYNCHRONIZE=false khi chạy hệ thống.
+
+Đã áp dụng migration trên smart_cmms_db.public: cấu trúc đối chiếu đạt 18 entity; đủ bốn vai trò chuẩn, không còn enum cũ, giữ số tài khoản. Build đạt, 99 tests đạt. Đã khởi động backend thực tế trên cổng tạm 3107: Swagger, đăng nhập admin, /auth/me, /work-orders, /schedules, /schedules/due, /reading-imports, /assets, /parts trả 200; API bảo vệ trả 401 khi không có JWT. Backend kiểm tra đã dừng; không nạp demo.

@@ -1,3 +1,6 @@
+import { lockPm } from "../schedules/pm.types";
+import { acceptPmWorkOrder, cancelPmWorkOrder } from "../schedules/pm-lifecycle";
+import { MaintenanceSchedule } from "../schedules/entities/maintenance-schedule.entity";
 import {
   BadRequestException,
   ConflictException,
@@ -133,6 +136,29 @@ export class WorkOrdersService {
     return result;
   }
 
+  // Internal only: scheduler already owns the PM lock, asset lock and caller transaction.
+  async createScheduled(manager: EntityManager, schedule: MaintenanceSchedule, systemUserId: string, technicianId: string | null) {
+    const id = randomUUID();
+    const wo = manager.create(WorkOrder, {
+      id, workOrderCode: `WO-${new Date().getUTCFullYear()}-${id}`,
+      assetId: schedule.assetId, scheduleId: schedule.id, createdById: systemUserId,
+      title: schedule.title, description: schedule.description,
+      type: WorkOrderType.PREVENTIVE, priority: schedule.priority,
+      status: WorkOrderStatus.OPEN, assignedTechnicianId: null,
+      scheduledStartDate: schedule.nextDueDate ?? null,
+    });
+    await manager.save(WorkOrder, wo);
+    const actor = { id: systemUserId, role: { name: "SYSTEM" } };
+    await this.recordStatus(manager, wo, null, actor, "Created automatically by maintenance schedule");
+    if (technicianId) {
+      wo.status = WorkOrderStatus.ASSIGNED;
+      wo.assignedTechnicianId = technicianId;
+      await manager.save(WorkOrder, wo);
+      await this.recordStatus(manager, wo, WorkOrderStatus.OPEN, actor, "Assigned to the least-loaded active technician");
+    }
+    return wo;
+  }
+
   findAll(query: QueryWorkOrdersDto, actor: WorkOrderActor) {
     this.requireManager(actor);
     return this.list(query, query.assignedTechnicianId);
@@ -252,6 +278,7 @@ export class WorkOrdersService {
   async assign(id: string, dto: AssignWorkOrderDto, actor: WorkOrderActor) {
     this.requireManager(actor);
     return this.dataSource.transaction(async (manager) => {
+      await lockPm(manager);
       const workOrder = await manager.findOne(WorkOrder, {
         where: { id },
         lock: { mode: "pessimistic_write" },
@@ -388,6 +415,7 @@ export class WorkOrdersService {
     if (!dto.rootCause?.trim() || !dto.solution?.trim())
       throw new BadRequestException("rootCause and solution are required");
     const result = await this.dataSource.transaction(async (manager) => {
+      await lockPm(manager);
       const wo = await manager.findOne(WorkOrder, {
         where: { id },
         lock: { mode: "pessimistic_write" },
@@ -441,6 +469,7 @@ export class WorkOrdersService {
         "Decision and verificationNotes are required",
       );
     const result = await this.dataSource.transaction(async (manager) => {
+      await lockPm(manager);
       const wo = await manager.findOne(WorkOrder, {
         where: { id },
         lock: { mode: "pessimistic_write" },
@@ -464,6 +493,7 @@ export class WorkOrdersService {
           throw new ConflictException(
             "A maintenance history already exists for this work order; reconcile legacy data first",
           );
+        await acceptPmWorkOrder(manager, wo, now, dto.meterReadingId);
         wo.status = WorkOrderStatus.CLOSED;
         wo.verifiedAt = now;
         wo.verifiedById = actor.id;
@@ -558,6 +588,9 @@ export class WorkOrdersService {
     actor: WorkOrderActor,
   ) {
     const cancelling = dto.status === WorkOrderStatus.CANCELLED;
+    if (!cancelling && (dto.scheduleAction || dto.deferDate || dto.deferHours !== undefined || dto.deferUntil)) {
+      throw new BadRequestException("Schedule cancellation fields require CANCELLED status");
+    }
     this.requireRole(
       actor,
       cancelling ? ["ADMIN", "MAINTENANCE_MANAGER"] : ["TECHNICIAN"],
@@ -578,6 +611,7 @@ export class WorkOrdersService {
       throw new BadRequestException("Phải nhập lý do tạm dừng hoặc hủy");
     }
     const result = await this.dataSource.transaction(async (manager) => {
+      await lockPm(manager);
       const workOrder = await manager.findOne(WorkOrder, {
         where: { id },
         lock: { mode: "pessimistic_write" },
@@ -610,6 +644,7 @@ export class WorkOrdersService {
         throw new ConflictException("Asset is inactive or decommissioned");
       }
       const now = new Date();
+      if (cancelling) await cancelPmWorkOrder(manager, workOrder, dto, now);
       const previousStatus = workOrder.status;
       if (dto.status === WorkOrderStatus.IN_PROGRESS && !workOrder.startTime) {
         workOrder.startTime = now;

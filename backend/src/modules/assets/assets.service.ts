@@ -219,6 +219,9 @@ export class AssetsService {
       const asset = await manager.findOne(Asset, { where: { id, isActive: true }, lock: { mode: 'pessimistic_write' } });
       if (!asset) throw new NotFoundException('Asset not found');
       await this.checkOperational(manager, id, dto.status);
+      if (dto.operatingHours !== undefined && Number(dto.operatingHours) !== Number(asset.operatingHours)) {
+        throw new ConflictException('Update operating hours through a reading/import; do not bypass meter history');
+      }
       if (Object.keys(dto).length) await manager.update(Asset, id, dto);
       return manager.findOneByOrFail(Asset, { id });
     });

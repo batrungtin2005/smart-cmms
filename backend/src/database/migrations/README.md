@@ -23,3 +23,8 @@ Integration test dựng schema trước thay đổi, áp dụng migration hai l�
 Chạy sau 20261113_work_order_status_history.sql và 20261113_material_requests.sql (nếu chưa chạy). Chọn đúng database/schema trong pgAdmin, mở file và Execute, chờ COMMIT rồi khởi động backend mới. File thêm giá trị REWORK_REQUIRED vào enum work_order_status_enum, thêm hai cột snapshot nullable trên WorkOrder và bỏ NOT NULL trên hai cột snapshot AssetHistory. Không dùng giá trị enum mới trước COMMIT. Có thể chạy lại; không backfill hoặc xóa dữ liệu cũ. Việc thêm enum không có rollback xóa giá trị tự động.
 
 Phiếu cũ thiếu timeline đầy đủ có thể nhận 409 khi hoàn thành; cần đối soát dữ liệu thật thay vì tự dựng timestamp. Frontend/mobile cần nhận diện trạng thái Cần sửa lại. Xem work-orders/COMPLETION.md cho quy tắc nghiệp vụ. Kiểm thử chỉ áp dụng migration trong schema riêng rồi dọn dẹp; schema ứng dụng chưa được cập nhật tự động.
+
+
+## 20261123_normalize_asset_enums_and_roles.sql
+
+Chạy cuối cùng, sau các migration Work Order và PM. Chuẩn hóa asset_status_enum/asset_criticality_enum sang tên số nhiều assets_*; giữ dữ liệu/default, không DROP CASCADE. Chuyển user từ MANAGER sang MAINTENANCE_MANAGER trước khi bỏ role cũ. Chạy lặp an toàn trong transaction. Database mới dùng SQL khởi tạo đã chuẩn hóa, không cần chạy lại migration lịch sử. Các file migration cũ giữ nguyên để mô tả lộ trình nâng cấp; không chạy lại chúng sau chuẩn hóa vì có thể tạo lại enum cũ.

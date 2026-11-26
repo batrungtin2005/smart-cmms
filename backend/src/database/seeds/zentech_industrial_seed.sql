@@ -6,45 +6,7 @@
 
 BEGIN;
 
--- 0. ĐẢM BẢO CÁC KIỂU ENUM VÀ IMPLICIT CAST ĐỒNG BỘ VỚI TYPEORM (CHỐNG LỖI MISMATCH)
-DO $$ BEGIN
-    CREATE TYPE assets_status_enum AS ENUM ('OPERATIONAL', 'DOWN', 'MAINTENANCE', 'DECOMMISSIONED');
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    CREATE TYPE asset_status_enum AS ENUM ('OPERATIONAL', 'DOWN', 'MAINTENANCE', 'DECOMMISSIONED');
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    CREATE TYPE assets_criticality_enum AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    CREATE TYPE asset_criticality_enum AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    CREATE TYPE maintenance_event_type_enum AS ENUM (
-        'BREAKDOWN', 'CORRECTIVE_REPAIR', 'PREVENTIVE_MAINTENANCE', 'INSPECTION', 'PART_REPLACEMENT', 'CALIBRATION'
-    );
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
--- Tạo Implicit Cast tự động tương thích 2 chiều
-DO $$ BEGIN
-    CREATE CAST (asset_status_enum AS assets_status_enum) WITH INOUT AS IMPLICIT;
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    CREATE CAST (assets_status_enum AS asset_status_enum) WITH INOUT AS IMPLICIT;
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    CREATE CAST (asset_criticality_enum AS assets_criticality_enum) WITH INOUT AS IMPLICIT;
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    CREATE CAST (assets_criticality_enum AS asset_criticality_enum) WITH INOUT AS IMPLICIT;
-EXCEPTION WHEN duplicate_object THEN null; END $$;
+-- Requires the current schema and enum/role normalization migration.
 
 -- 1. TẠO VỊ TRÍ NHÀ XƯỞNG CỦA TẬP ĐOÀN ZENTECH (LOCATIONS)
 INSERT INTO locations (id, code, name, description, is_active)

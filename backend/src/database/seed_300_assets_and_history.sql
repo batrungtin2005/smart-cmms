@@ -7,53 +7,7 @@
 
 BEGIN;
 
--- 1. ĐẢM BẢO EXTENSION UUID ĐƯỢC KÍCH HOẠT
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- 2. TẠO CÁC KIỂU ENUM NẾU CHƯA CÓ (ĐỒNG BỘ CẢ assets_ VÀ asset_)
-DO $$ BEGIN
-    CREATE TYPE assets_status_enum AS ENUM ('OPERATIONAL', 'DOWN', 'MAINTENANCE', 'DECOMMISSIONED');
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    CREATE TYPE asset_status_enum AS ENUM ('OPERATIONAL', 'DOWN', 'MAINTENANCE', 'DECOMMISSIONED');
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    CREATE TYPE assets_criticality_enum AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    CREATE TYPE asset_criticality_enum AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    CREATE TYPE maintenance_event_type_enum AS ENUM (
-        'BREAKDOWN',
-        'CORRECTIVE_REPAIR',
-        'PREVENTIVE_MAINTENANCE',
-        'INSPECTION',
-        'PART_REPLACEMENT',
-        'CALIBRATION'
-    );
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
--- 2.1. TẠO IMPLICIT CAST TỰ ĐỘNG CHUYỂN ĐỔI NẾU KHÁC TÊN ENUM (CHỐNG LỖI MISMATCH TYPEORM)
-DO $$ BEGIN
-    CREATE CAST (asset_status_enum AS assets_status_enum) WITH INOUT AS IMPLICIT;
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    CREATE CAST (assets_status_enum AS asset_status_enum) WITH INOUT AS IMPLICIT;
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    CREATE CAST (asset_criticality_enum AS assets_criticality_enum) WITH INOUT AS IMPLICIT;
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    CREATE CAST (assets_criticality_enum AS asset_criticality_enum) WITH INOUT AS IMPLICIT;
-EXCEPTION WHEN duplicate_object THEN null; END $$;
+-- Requires the current schema and enum/role normalization migration.
 
 -- 3. CHÈN VỊ TRÍ NHÀ XƯỞNG MẪU (locations) NẾU BẢNG ĐANG TRỐNG
 INSERT INTO locations (id, code, name, description, is_active)

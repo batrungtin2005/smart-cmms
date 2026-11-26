@@ -49,6 +49,26 @@ async function main() {
     await client.query(`SET LOCAL search_path TO "${schema}", public`);
     await client.query(fs.readFileSync(path.join(__dirname, 'smart_cmms_db.sql'), 'utf8'));
 
+    // Exercise both normalization paths and preserve a real legacy-role user.
+    await client.query(`ALTER TYPE assets_status_enum RENAME TO asset_status_enum;
+      CREATE TYPE assets_status_enum AS ENUM ('OPERATIONAL','DOWN','MAINTENANCE','DECOMMISSIONED');
+      ALTER TYPE assets_criticality_enum RENAME TO asset_criticality_enum;
+      INSERT INTO roles (name) VALUES ('MANAGER');`);
+    const legacyUser = randomUUID();
+    await client.query("INSERT INTO users (id,role_id,username,email,full_name,password_hash) SELECT $1,id,'legacy_manager','legacy@test.invalid','Legacy manager','test-only' FROM roles WHERE name='MANAGER'", [legacyUser]);
+    const legacyAsset = randomUUID();
+    await client.query("INSERT INTO assets (id,asset_code,name,category,status,criticality) VALUES ($1,'LEGACY-ASSET','Legacy','Test','DOWN','HIGH')", [legacyAsset]);
+    const normalization = fs.readFileSync(path.join(__dirname, 'migrations/20261123_normalize_asset_enums_and_roles.sql'), 'utf8')
+      .replace(/^BEGIN;$/m, '').replace(/^COMMIT;$/m, '');
+    await client.query(normalization);
+    await client.query(normalization);
+    assert.equal((await client.query('SELECT r.name FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=$1', [legacyUser])).rows[0].name, 'MAINTENANCE_MANAGER');
+    assert.deepEqual((await client.query('SELECT status,criticality FROM assets WHERE id=$1', [legacyAsset])).rows[0], { status: 'DOWN', criticality: 'HIGH' });
+    assert.equal((await client.query("SELECT count(*) FROM roles WHERE name='MANAGER'")).rows[0].count, '0');
+    await client.query('DELETE FROM assets WHERE id=$1', [legacyAsset]);
+    await client.query('DELETE FROM users WHERE id=$1', [legacyUser]);
+    console.log('PASS: enum normalization, legacy role reassignment, preserved values and migration replay.');
+
     for (const table of metadata.entityMetadatas) {
       const { rows } = await client.query(
         'SELECT * FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2',

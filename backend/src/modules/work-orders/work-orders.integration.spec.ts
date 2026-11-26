@@ -82,6 +82,8 @@ postgresDescribe("WorkOrdersModule HTTP + PostgreSQL", () => {
       // Start from the previous schema, then exercise the upgrade (including replay).
       readFileSync(resolve(backend, "src/database/smart_cmms_db.sql"), "utf8")
         .split("-- Material requests and warehouse issue workflow.")[0]
+        .replaceAll("assets_status_enum", "asset_status_enum")
+        .replaceAll("assets_criticality_enum", "asset_criticality_enum")
         .replace("    asset_status_at_start    asset_status_enum NULL,\n", "")
         .replace("    operating_hours_at_failure NUMERIC(10, 2) NULL,\n", "")
         .replace(
@@ -115,6 +117,12 @@ postgresDescribe("WorkOrdersModule HTTP + PostgreSQL", () => {
       .replace(/^COMMIT;$/m, "");
     await adminClient.query(completionMigration);
     await adminClient.query(completionMigration);
+    const pmMigration = readFileSync(resolve(backend, "src/database/migrations/20261123_maintenance_schedules.sql"), "utf8")
+      .replace(/^BEGIN;$/m, "").replace(/^COMMIT;$/m, "");
+    await adminClient.query(pmMigration);
+    const normalization = readFileSync(resolve(backend, "src/database/migrations/20261123_normalize_asset_enums_and_roles.sql"), "utf8").replace(/^BEGIN;$/m, "").replace(/^COMMIT;$/m, "");
+    await adminClient.query(normalization);
+    await adminClient.query(normalization);
     await adminClient.query("COMMIT");
 
     const module = await Test.createTestingModule({

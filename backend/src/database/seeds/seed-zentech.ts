@@ -1,7 +1,6 @@
 import { Client } from 'pg';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
-import * as fs from 'fs';
 import { seedParts } from './seed-parts';
 import { seedAssets } from './seed-assets';
 
@@ -24,14 +23,7 @@ async function runZentechMasterSeed() {
     await client.connect();
     console.log('✅ Kết nối database thành công!');
 
-    // BƯỚC 1: CHẠY MIGRATION CẤU TRÚC BẢNG NẾU CẦN
-    const migrationPath = path.resolve(__dirname, '../migrations/20261115_asset_history_and_zentech_schema.sql');
-    if (fs.existsSync(migrationPath)) {
-      console.log(`\n📦 Đang thực thi Migration cấu trúc bảng: ${path.basename(migrationPath)}...`);
-      const migrationSql = fs.readFileSync(migrationPath, 'utf8');
-      await client.query(migrationSql);
-      console.log('✅ Cấu trúc bảng và Enums đã sẵn sàng!');
-    }
+    // Apply schema/migrations separately before seeding data.
 
     // BƯỚC 2: SEED 7 PHÂN XƯỞNG & VỊ TRÍ ZENTECH
     console.log('\n🏭 Đang khởi tạo 7 vị trí phân xưởng & trạm tiện ích Zentech...');

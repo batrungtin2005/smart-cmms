@@ -1,6 +1,6 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform } from "class-transformer";
-import { IsIn, IsString, IsNotEmpty, MaxLength } from "class-validator";
+import { IsIn, IsString, IsNotEmpty, MaxLength, IsOptional, IsUUID } from "class-validator";
 
 export class VerifyWorkOrderDto {
   @ApiProperty({ enum: ["ACCEPT", "REJECT"] })
@@ -16,4 +16,8 @@ export class VerifyWorkOrderDto {
   @IsNotEmpty()
   @MaxLength(1000)
   verificationNotes: string;
+  @ApiPropertyOptional({ description: "Required for acceptance of usage-based PM; reading measured after completion and within 15 minutes" })
+  @IsOptional() @IsUUID()
+  meterReadingId?: string;
+
 }

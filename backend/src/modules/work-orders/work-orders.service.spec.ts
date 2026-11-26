@@ -132,7 +132,7 @@ describe("Work Order input and business rules", () => {
     WorkOrderStatus.CANCELLED,
     WorkOrderStatus.REWORK_REQUIRED,
   ])("rejects assignment of %s orders", async (status) => {
-    const lockedManager = { findOne: jest.fn().mockResolvedValue({ status }) };
+    const lockedManager = { query: jest.fn().mockResolvedValue([]), findOne: jest.fn().mockResolvedValue({ status }) };
     transaction.mockImplementation((callback) => callback(lockedManager));
     await expect(
       service.assign("id", { assignedTechnicianId: technician.id }, manager),
