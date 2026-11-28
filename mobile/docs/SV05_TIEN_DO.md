@@ -1,10 +1,10 @@
 # SV05 — Tiến độ mobile tuần 1–4
 
-**Cập nhật:** 18/11/2026. **Nhánh:** `feat/sv05-mobile-app`.
+**Cập nhật:** 28/11/2026. **Nhánh:** `feat/sv05-mobile-app`.
 
 ## Đã hoàn thành
 
-- Đã lấy và gộp develop `96fb8bd` vào nhánh SV05 ở máy, dùng backend Work Order của SV03 từ `63665f2`. Không tự sửa mã backend.
+- Đã lấy develop `8957711` về nhánh SV05 ngày 28/11/2026. Luồng Work Order được tích hợp từ đợt tuần 3; lượt này chỉ cập nhật source của nhóm và tài liệu mobile.
 - Flutter chia presentation/domain/data; đăng nhập TECHNICIAN, lưu token an toàn, khôi phục phiên và đăng xuất.
 - Camera QR/nhập mã thủ công; tra cứu thông tin và lịch sử thiết bị bằng API thật.
 - Work Order thật: danh sách/lọc 4 ưu tiên/phân trang, chi tiết, bắt đầu, tạm dừng có lý do, tiếp tục và nhận công việc Cần sửa lại.
@@ -40,9 +40,18 @@
 - Khi ghi yêu cầu offline, xóa phần vật tư đã gửi khỏi bản nháp trong cùng transaction với hàng đợi; giữ nguyên báo cáo. Khi gửi POST online, ghi cờ cần kiểm tra trước khi gọi API, chống tạo trùng nếu app tắt giữa chừng.
 - Đã sửa lỗi mất focus khi dòng thông báo tự lưu xuất hiện; kiểm thử giữ focus và nhập tiếp sau ký tự đầu tiên đã đạt.
 
+## Cập nhật source ngày 28/11/2026
+
+- Đã lấy `develop` tại `8957711` về nhánh SV05 bằng fast-forward. Source mới có cập nhật SV02 về bảo mật/lịch sử tài sản, SV03 về lịch bảo dưỡng, SV04 về dashboard và SV06 về kiểm thử. Commit mobile tuần 4 `37245c8` đã được nhóm gộp vào develop.
+- Đã đối chiếu API Work Order và quyền đọc của TECHNICIAN: các payload mobile đang dùng vẫn được hỗ trợ; các trường hủy/hoãn lịch PM mới là tùy chọn, không cần thêm vào thao tác bắt đầu/tạm dừng/hoàn thành của mobile.
+- `flutter analyze` không có vấn đề; chạy lại đủ **117 kiểm thử mobile đạt** sau khi cập nhật source. Các kết quả Android/API thật ngày 15–18/11 ở trên là kết quả của đợt trước, chưa phải nghiệm thu với backend ngày 28/11.
+- Đã cài thêm thư viện theo source mới và `npm run build:backend` thành công. Không sửa dependency manifest hoặc lockfile của nhóm; chưa khởi động backend mới để kiểm thử API trên database.
+- Đã kiểm tra cả develop `8957711` và nhánh SV03 `b27e2af`: Sync vẫn chỉ có README, chưa có controller/service/DTO/module cho `POST /api/v1/sync/batch`. Theo phạm vi đã thống nhất, SV05 chỉ làm mobile và chờ API SV03; chưa thể chốt nghiệm thu đồng bộ thật tuần 4–5.
+- Chưa áp dụng thêm migration hoặc chạy seed lên database trong lượt cập nhật này. Trước khi chạy backend mới với database cũ, cần sao lưu và áp dụng migration nhóm theo thứ tự: Work Order 13/11 (nếu thiếu) → lịch sử/schema 15/11 → PM 23/11 → chuẩn hóa enum/role 23/11. Không chạy lại các migration cũ sau bước chuẩn hóa.
+
 ## Database và giới hạn
 
-- Đã kiểm tra GitHub `develop` ngày 18/11/2026 tại `b6af603`: thư mục Sync mới có README, chưa có API batch thực thi. Phần bàn giao này hoàn thành lưu trữ/hàng đợi cục bộ; thao tác vẫn PENDING cho tới khi tích hợp Sync API.
+- Đã kiểm tra lại GitHub ngày 28/11/2026: Sync vẫn chỉ có README, chưa có API batch thực thi. Phần bàn giao này hoàn thành lưu trữ/hàng đợi cục bộ; thao tác vẫn PENDING cho tới khi tích hợp Sync API.
 - Đã sao lưu `smart_cmms_mobile_dev` trước khi áp dụng 3 migration SV03: status history → material requests → completion. Backup/báo cáo nằm trong `mobile/build/verification/`, được Git bỏ qua.
 - Các thử nghiệm ghi dữ liệu có nhãn SV05 vào database riêng; có giao dịch xuất kho thử qua API. Không chạy trên database dùng chung/sản xuất.
 - SQLite, bản nháp bền vững và hàng đợi UUID đã triển khai cho Work Order API trên mobile. Gửi Sync API, nhận SYNCED/CONFLICT/FAILED và thử lại có kiểm soát còn chờ hợp đồng/API SV03. Chưa nghiệm thu đồng bộ hai chiều tuần 4–5.

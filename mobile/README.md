@@ -65,7 +65,7 @@ Bản iOS cần được build và kiểm thử trên macOS có Xcode. Kiểm th
 - Gọi `GET /api/v1/assets/inspect/:code` với Bearer token, hiển thị tên, trạng thái, vị trí/xưởng, hãng/model/serial, giờ vận hành, thông số và tối đa 5 lịch sử bảo trì gần nhất.
 - Phân biệt mã không hợp lệ, không tìm thấy tài sản, lỗi mạng/máy chủ. QR JSON có UUID khác với tài sản trên backend sẽ bị từ chối. Token hết hạn sẽ đưa về đăng nhập.
 
-Phần mobile tuần 3 đã chuyển sang API thật của SV03 (backend từ develop `63665f2`; nhánh SV05 đã gộp develop `96fb8bd` ngày 15/11/2026). Máy hiện tại đã sao lưu và cập nhật database thử nghiệm `smart_cmms_mobile_dev` bằng ba migration có sẵn của SV03. Tuần 4 bổ sung SQLite và hàng đợi PENDING trên điện thoại; gửi Sync API thật và kiểm thử iOS còn là phần việc tiếp theo.
+Phần mobile tuần 3 đã chuyển sang API thật của SV03. Ngày 28/11/2026, nhánh SV05 đã lấy develop `8957711`, có cả phần SQLite và hàng đợi PENDING tuần 4 đã được nhóm gộp trước đó. Chạy lại `flutter analyze` không có vấn đề và **117 kiểm thử Flutter đạt**. Sync API vẫn chưa có implementation trên develop hoặc nhánh SV03 `b27e2af`; gửi đồng bộ thật và kiểm thử iOS còn là phần việc tiếp theo.
 
 ### Tuần 3 — công việc và vật tư qua API thật
 
@@ -85,25 +85,21 @@ Phần mobile tuần 3 đã chuyển sang API thật của SV03 (backend từ de
 
 Đăng nhập lần đầu cần backend thật. Bản Android/iOS có lưu phiên đã xác thực còn hạn để khôi phục offline, QR dùng cache của thiết bị đã tra cứu. Work Order API trên mobile lưu bản nháp bằng SQLite; Work Order mẫu và bản web vẫn giữ bản nháp trong bộ nhớ. Chi tiết endpoint/payload trong [hợp đồng API hiện tại](docs/work_order_api_contract.md). iOS chưa được build/kiểm thử.
 
-Đã kiểm tra: `flutter analyze` không có vấn đề; **81 Flutter tests đạt**; **45 backend tests có sẵn của SV03 đạt** (gồm PostgreSQL trong schema test riêng); **6 nhóm kiểm tra API thật đạt**, gồm chống trừ kho lặp, chặn PENDING và vòng sửa lại/nghiệm thu. API my-tasks và parts đều trả 200. Báo cáo `build/verification/work-orders-live-api-report.json` và `work-orders-api-readiness.json` được sinh lại tại máy, không chứa mật khẩu/token.
+Kết quả đợt tuần 3 trước khi cập nhật backend ngày 28/11: `flutter analyze` không có vấn đề; **81 Flutter tests đạt**; **45 backend tests có sẵn của SV03 đạt** (gồm PostgreSQL trong schema test riêng); **6 nhóm kiểm tra API thật đạt**, gồm chống trừ kho lặp, chặn PENDING và vòng sửa lại/nghiệm thu. API my-tasks và parts đều trả 200. Báo cáo `build/verification/work-orders-live-api-report.json` và `work-orders-api-readiness.json` không chứa mật khẩu/token. Các kết quả API/Android này chưa được chạy lại với backend mới.
 
 Ngày 15/11/2026, **7 bước chạy APK API thật trên Android 11/API 30 đạt**: lọc công việc, bắt đầu, gửi vật tư, chặn hoàn thành khi chờ duyệt, cập nhật sau khi Admin duyệt, hoàn thành và mở lại tiến trình. Báo cáo/nguyên nhân/cách xử lý đã lưu trên backend, tồn kho chỉ trừ một lần. `build/verification/work-orders-android-report.json` ghi `status: passed`, `mode: live-api` và SHA-256 trùng APK đã cài; đây là kết quả bản API thật, độc lập với bản mẫu cũ.
 
-Với database cũ, dừng backend trước khi áp dụng migration; giữ PostgreSQL chạy. Tại thư mục gốc:
+Với backend mới và database cũ, dừng backend, giữ PostgreSQL chạy và sao lưu trước khi nâng cấp theo [hướng dẫn migration của nhóm](../backend/src/database/migrations/README.md). Thứ tự: ba migration Work Order 13/11 (nếu thiếu) → `20261115_asset_history_and_zentech_schema.sql` → `20261123_maintenance_schedules.sql` → `20261123_normalize_asset_enums_and_roles.sql`. Bước chuẩn hóa chạy cuối; không chạy lại migration cũ sau đó. Database thử trên máy mới được áp dụng ba migration Work Order trong đợt trước; lượt cập nhật 28/11 chưa chạy thêm migration hoặc seed.
 
-```powershell
-# Chỉ dùng cho database smart_cmms_mobile_dev trên localhost.
-# Database máy này đã migration; lệnh prepare chỉ cần khi thiết lập/cập nhật DB thử.
-node mobile/tool/prepare_week3_backend.mjs
-```
+`prepare_week3_backend.mjs` là công cụ của đợt tuần 3, chỉ áp dụng ba migration Work Order cho database `smart_cmms_mobile_dev` trên localhost. Công cụ này **không nâng cấp đầy đủ database cho backend mới**; không dùng lại sau khi chuẩn hóa enum/role.
 
-Sau đó build/khởi động backend như hướng dẫn bên dưới, rồi tạo fixture và kiểm tra API:
+Sau khi database đã nâng cấp đúng thứ tự, build/khởi động backend như hướng dẫn bên dưới, rồi tạo fixture và kiểm tra API tại thư mục gốc:
 
 ```powershell
 node mobile/tool/verify_work_orders_api.mjs
 ```
 
-`prepare_week3_backend.mjs` giữ bản sao lưu trước khi áp dụng migration; báo cáo/backup ở `build/verification/`. `verify_work_orders_api.mjs` tạo phụ tùng thử riêng và các công việc [SV05 DEMO ...] đã giao cho mobile_tech. Dữ liệu có ghi xuống database thử và có kiểm tra xuất kho; không chạy trên database dùng chung/sản xuất.
+`verify_work_orders_api.mjs` tạo phụ tùng thử riêng và các công việc [SV05 DEMO ...] đã giao cho mobile_tech. Dữ liệu có ghi xuống database thử và có kiểm tra xuất kho; chỉ dùng database mobile riêng. Báo cáo/backup cũ nằm ở `build/verification/`.
 
 Đóng gói tại `mobile/`, trước khi mở giả lập nếu máy thiếu RAM:
 
