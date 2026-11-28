@@ -1,6 +1,6 @@
 # SV05 — API Work Order đã tích hợp
 
-Cập nhật 18/11/2026 theo backend SV03 từ `63665f2`; nhánh mobile đã gộp develop `96fb8bd`. Bổ sung hàng đợi tuần 4 và kết quả Android offline. Mobile dùng API hiện có, không sửa quy trình backend.
+Cập nhật 28/11/2026 sau khi lấy develop `8957711` (có commit mobile tuần 4 `37245c8`). API Work Order cũ vẫn giữ các trường bắt buộc đang dùng; các trường điều khiển lịch PM bổ sung là tùy chọn. Mobile giữ phạm vi SV05, không sửa logic backend.
 
 ## Xác thực và dữ liệu trả về
 
@@ -64,11 +64,13 @@ IN_PROGRESS → COMPLETED. Còn yêu cầu vật tư PENDING thì bị chặn. Q
 
 ## Database và kiểm thử
 
-Máy hiện tại dùng smart_cmms_mobile_dev; đã sao lưu và áp dụng 3 migration SV03 theo thứ tự: status_history → material_requests → work_order_completion. Script `prepare_week3_backend.mjs` chỉ hỗ trợ database mobile riêng trên localhost; không chạy lại toàn bộ SQL khởi tạo trên database cũ.
+Database thử `smart_cmms_mobile_dev` đã được sao lưu và áp dụng 3 migration Work Order trong đợt tuần 3: status_history → material_requests → work_order_completion. Lượt cập nhật 28/11 chưa nâng cấp database. Backend mới cần thêm migration lịch sử/schema và PM, rồi chuẩn hóa enum/role sau cùng theo [hướng dẫn demo](../HUONG_DAN_DEMO.md). Script `prepare_week3_backend.mjs` chỉ hỗ trợ ba migration cũ, không phải công cụ nâng cấp đầy đủ cho backend mới; không chạy lại sau bước chuẩn hóa.
 
 `verify_work_orders_api.mjs` kiểm tra API thật bằng dữ liệu SV05, tạo fixture cho Android. `verify_android_work_orders_live.mjs` kiểm tra APK mặc định, có thao tác Admin riêng để mô phỏng duyệt kho. Các kết quả nằm trong `mobile/build/verification/`, không chứa mật khẩu/token.
 
 ## Tuần 4: hàng đợi cục bộ và phần cần chốt với SV03
+
+Kiểm tra ngày 28/11/2026: cả develop `8957711` và nhánh SV03 `b27e2af` vẫn chỉ có README Sync. Bảng SQL và Swagger tag không phải API thực thi. Chưa có endpoint batch để xác minh gửi thật, chống xử lý lặp UUID hoặc phản hồi xung đột. Cần SV03 cung cấp implementation và ví dụ request/response trước khi chốt phần tuần 4–5.
 
 SQLite và hàng đợi cục bộ đã có. Đây là định dạng nội bộ, chưa phải DTO chính thức của `POST /sync/batch`: UUID, loại thao tác, công việc, payload, thời điểm UTC, thứ tự lưu và UUID phụ thuộc trước đó. Các loại hiện có: START_WORK_ORDER, RESUME_WORK_ORDER, PAUSE_WORK_ORDER, REQUEST_MATERIALS, CANCEL_MATERIAL_REQUEST, COMPLETE_WORK_ORDER.
 

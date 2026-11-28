@@ -4,13 +4,17 @@ Dành cho máy Windows hiện tại. Dùng PowerShell trong VS Code; mở Docker
 
 ## 1. Bật backend
 
+Đã lấy develop `8957711` ngày 28/11/2026. Nếu database còn ở phiên bản demo cũ, **sao lưu và nâng cấp DB trước khi khởi động backend mới**: migration Work Order 13/11 (nếu chưa có) → `20261115_asset_history_and_zentech_schema.sql` → `20261123_maintenance_schedules.sql` → `20261123_normalize_asset_enums_and_roles.sql`. Xem [hướng dẫn migration của nhóm](../backend/src/database/migrations/README.md). Giữ backend dừng lúc nâng cấp; không chạy lại migration cũ sau bước chuẩn hóa.
+
 ```powershell
 cd D:\Tuan3
+$env:NODE_USE_SYSTEM_CA = '1'
+npm install --ignore-scripts --package-lock=false
 docker start smart_cmms_postgres smart_cmms_redis
 npm run dev:backend
 ```
 
-Nếu backend đã chạy ở cổng 3000 thì bỏ qua lệnh cuối. Database mobile trên máy này đã cập nhật migration SV03.
+Lệnh cài thư viện chỉ cần sau khi lấy source mới; dòng `NODE_USE_SYSTEM_CA` dùng kho chứng chỉ Windows trên Node hiện tại. Đây là máy đã cài backend trước đó; `--ignore-scripts` giữ nguyên thư viện native đang có. Nếu backend đã chạy ở cổng 3000 thì bỏ qua lệnh cuối. Lượt cập nhật 28/11 chưa tự nâng cấp database hoặc chạy seed. Sync API vẫn chưa có trên GitHub; chỉ demo được phần online và offline cục bộ đang có.
 
 Tạo công việc và phụ tùng thử mới (terminal khác, tại thư mục gốc):
 
